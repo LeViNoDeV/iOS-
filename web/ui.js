@@ -51,20 +51,34 @@ const button = (label, fn, cls = "") => `<button class="btn ${cls}" data-h="${h(
 
 // MARK: Actions glue
 
+const snap = (L) => ({ happiness: L.stats.happiness, health: L.stats.health, smarts: L.stats.smarts, looks: L.stats.looks, money: L.money });
+
+/// What changed between two snapshots, as display chips.
+function deltasBetween(a, b) {
+  const out = [];
+  for (const [k, emoji] of [["happiness", "😊"], ["health", "❤️"], ["smarts", "🧠"], ["looks", "✨"]]) {
+    const d = b[k] - a[k];
+    if (d) out.push({ text: `${emoji} ${d > 0 ? "+" : ""}${d}`, good: d > 0 });
+  }
+  const m = b.money - a.money;
+  if (m) out.push({ text: `💵 ${m > 0 ? "+" : "-"}${formatMoney(Math.abs(m))}`, good: m > 0 });
+  return out;
+}
+
 function act(fn) {
   const L = store.life;
   if (!L || !L.isAlive) return;
-  const wasAlive = L.isAlive;
+  const before = snap(L);
   const result = fn(L);
-  if (wasAlive && !L.isAlive) store.graveyard.unshift(summaryOf(L));
-  if (result) ui.outcome = result;
+  if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
+  if (result) ui.outcome = { ...result, deltas: deltasBetween(before, snap(L)), dead: !L.isAlive };
   save();
   render();
 }
 
 function ageUpNow() {
   const L = store.life;
-  if (!L || !L.isAlive || L.pendingEvents.length || ui.outcome || ui.choice) return;
+  if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || ui.outcome || ui.choice) return;
   ageUp(L);
   if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
   ui.openings = null;
@@ -185,7 +199,7 @@ function renderGame(L) {
   for (const a of L.addictions) chips.push(`<span class="chip bad">⚠️ ${esc(Addictions[a])}</span>`);
   if (inPrison(L)) chips.push(`<span class="chip bad">🔒 In prison</span>`);
 
-  const blocked = L.pendingEvents.length > 0;
+  const blocked = L.pendingEvents.length > 0 || (L.popups || []).length > 0;
   const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["profile", "🪪", "Profile"]];
 
   return `<div class="game">
@@ -564,30 +578,58 @@ function renderSubview(L, view) {
 
 // MARK: Modals
 
+function deltaChips(deltas) {
+  if (!deltas || !deltas.length) return "";
+  return `<div class="deltas">${deltas.map((d) => `<span class="delta ${d.good ? "up" : "down"}">${esc(d.text)}</span>`).join("")}</div>`;
+}
+
+function card({ emoji, tag, title, body, deltas, buttons, tone = "" }) {
+  return `<div class="scrim"><div class="modal event ${tone}" role="dialog" aria-modal="true" aria-labelledby="m-title" data-stop="1">
+    <div class="event-head"><div class="event-emoji" aria-hidden="true">${emoji || "❗"}</div>${tag ? `<div class="modal-tag">${esc(tag)}</div>` : ""}<h3 id="m-title">${esc(title)}</h3></div>
+    <div class="event-body"><p>${esc(body)}</p>${deltaChips(deltas)}<div class="choices">${buttons}</div></div></div></div>`;
+}
+
 function renderModals(L) {
+  // 1. Choices the player must make (BitLife-style event cards).
   if (L && L.isAlive && L.pendingEvents.length) {
     const e = L.pendingEvents[0];
-    return `<div class="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
-      <div class="modal-tag">Age ${L.age} · Something happened</div><h3 id="m-title">${esc(e.title)}</h3><p>${esc(e.message)}</p>
-      <div class="choices">${e.options.map((o, i) => `<button class="choice" data-h="${h(() => {
+    const left = L.pendingEvents.length - 1;
+    return card({
+      emoji: e.emoji, tag: `Age ${L.age}${left ? ` · ${left} more` : ""}`, title: e.title, body: e.message,
+      buttons: e.options.map((o, i) => `<button class="choice" data-h="${h(() => {
+        const before = snap(L);
         const r = resolveEvent(L, e, i);
         if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
-        ui.outcome = r;
+        ui.outcome = { ...r, emoji: e.emoji, deltas: deltasBetween(before, snap(L)), dead: !L.isAlive };
         save();
         render();
-      })}">${esc(o)}</button>`).join("")}</div></div></div>`;
+      })}">${esc(o)}</button>`).join(""),
+    });
   }
+  // 2. The result of the last choice or action.
+  if (ui.outcome) {
+    const o = ui.outcome;
+    const close = h(() => { ui.outcome = null; render(); });
+    return card({
+      emoji: o.dead ? "☠️" : o.emoji || "📣", title: o.title, body: o.message, deltas: o.deltas, tone: o.dead ? "dark" : "result",
+      buttons: `<button class="choice" data-h="${close}">${o.dead ? "See my life" : "OK"}</button>`,
+    });
+  }
+  // 3. News from the year that just passed.
+  if (L && L.isAlive && (L.popups || []).length) {
+    const n = L.popups[0];
+    const next = h(() => { L.popups.shift(); save(); render(); });
+    return card({
+      emoji: n.emoji, tag: `Age ${L.age}${L.popups.length > 1 ? ` · ${L.popups.length - 1} more` : ""}`, title: n.title, body: n.message, tone: "news",
+      buttons: `<button class="choice" data-h="${next}">${L.popups.length > 1 ? "Next" : "OK"}</button>`,
+    });
+  }
+  // 4. Pickers and confirmations.
   if (ui.choice) {
     const c = ui.choice;
     return `<div class="scrim" data-h="${h(() => { ui.choice = null; render(); })}"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title" data-stop="1">
       <h3 id="m-title">${esc(c.title)}</h3>${c.message ? `<p class="muted">${esc(c.message)}</p>` : ""}
       <div class="choices">${c.options.map((o) => `<button class="choice${o.danger ? " danger" : o.secondary ? " secondary" : ""}" data-h="${h(() => { ui.choice = null; o.fn(); render(); })}">${esc(o.label)}</button>`).join("")}</div></div></div>`;
-  }
-  if (ui.outcome) {
-    const o = ui.outcome;
-    return `<div class="scrim" data-h="${h(() => { ui.outcome = null; render(); })}"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title" data-stop="1">
-      <h3 id="m-title">${esc(o.title)}</h3><p>${esc(o.message)}</p>
-      <div class="choices"><button class="choice" data-h="${h(() => { ui.outcome = null; render(); })}">OK</button></div></div></div>`;
   }
   return "";
 }
@@ -608,9 +650,11 @@ function onKey(e) {
   if (e.target.closest("input, textarea, select")) return;
   if (e.key === " " || e.key === "Spacebar") {
     if (ui.outcome) { e.preventDefault(); ui.outcome = null; render(); return; }
+    if (store.life?.popups?.length && !store.life.pendingEvents.length) { e.preventDefault(); store.life.popups.shift(); save(); render(); return; }
     if (store.life && store.life.isAlive && !ui.choice && !store.life.pendingEvents.length) { e.preventDefault(); ageUpNow(); }
   } else if (e.key === "Escape") {
     if (ui.outcome || ui.choice) { ui.outcome = null; ui.choice = null; render(); }
+    else if (store.life?.popups?.length && !store.life.pendingEvents.length) { store.life.popups.shift(); save(); render(); }
     else if (ui.stack.length) { ui.stack.pop(); render(); }
   }
 }

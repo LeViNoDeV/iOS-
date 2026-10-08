@@ -67,7 +67,7 @@ const Illnesses = {
   flu: { name: "Flu", damage: 4, cure: 0.9 },
   migraine: { name: "Migraines", damage: 2, cure: 0.9 },
   backPain: { name: "Back Pain", damage: 4, cure: 0.7 },
-  depression: { name: "Depression", damage: 3, cure: 0.4 },
+  depression: { name: "Depression", damage: 2, cure: 0.4 },
   insomnia: { name: "Insomnia", damage: 2, cure: 0.7 },
   pneumonia: { name: "Pneumonia", damage: 8, cure: 0.7 },
   diabetes: { name: "Diabetes", damage: 8, cure: 0.25 },
@@ -80,7 +80,7 @@ function randomIllness(age) {
   let pool = ["cold", "cold", "flu", "flu", "migraine", "brokenArm"];
   if (age >= 13) pool.push("depression", "insomnia");
   if (age >= 30) pool.push("backPain", "pneumonia");
-  if (age >= 45) pool.push("diabetes", "heartDisease", "cancer");
+  if (age >= 45) pool.push("backPain", "flu", "diabetes", "heartDisease", "cancer");
   if (age >= 65) pool.push("heartDisease", "cancer", "pneumonia");
   return pick(pool);
 }
@@ -331,7 +331,7 @@ function blankLife(firstName, lastName, gender, city, country) {
     prisonYearsLeft: 0, criminalRecord: [],
     illnesses: [], addictions: [], hasDriversLicense: false, fame: 0, followers: 0, popularity: 50, clubs: [],
     datingPreference: null, generation: 1, counters: {},
-    log: [], pendingEvents: [],
+    log: [], pendingEvents: [], popups: [],
   };
 }
 
@@ -379,6 +379,15 @@ function schoolName(L) {
   if (L.enrollment) return L.enrollment.kind === "university" ? `University (${L.enrollment.major})` : GraduateFields[L.enrollment.field].schoolName;
   if (!inGradeSchool(L)) return null;
   return L.age < 12 ? "Elementary School" : "High School";
+}
+
+/// Queues a news popup shown after the year's choices (deaths, promotions, diagnoses...).
+function popup(L, emoji, title, message) {
+  (L.popups ||= []).push({ emoji, title, message });
+}
+function notify(L, emoji, title, message) {
+  record(L, message);
+  popup(L, emoji, title, message);
 }
 
 function record(L, text) {
@@ -487,7 +496,9 @@ function ageStats(L) {
   let smarts = 0;
   if (L.age < 25) smarts += rnd(0, 2);
   if (L.age > 75) smarts -= rnd(0, 2);
-  adjust(L, { happiness: rnd(-4, 3), health, smarts, looks });
+  // Moods drift back toward normal over time instead of spiralling.
+  const settle = Math.round((60 - L.stats.happiness) * 0.2);
+  adjust(L, { happiness: rnd(-4, 3) + settle, health, smarts, looks });
   if (L.stats.happiness < 15) record(L, "I've been feeling really down lately.");
 }
 
@@ -495,17 +506,20 @@ function progressHealth(L) {
   for (const id of [...L.illnesses]) {
     const ill = Illnesses[id];
     adjust(L, { happiness: -2, health: -ill.damage });
-    if (roll(0.25) && ill.cure >= 0.7) {
+    const heal = id === "depression" ? clamp(0.1 + (L.stats.happiness - 30) / 80, 0.05, 0.6) : ill.cure >= 0.7 ? 0.45 : 0.04;
+    if (roll(heal)) {
       L.illnesses = L.illnesses.filter((x) => x !== id);
       record(L, `My ${ill.name.replace("a ", "").toLowerCase()} went away on its own.`);
     }
   }
-  const sick = L.age < 5 ? 0.08 : L.age < 40 ? 0.1 : 0.12 + (L.age - 40) * 0.004;
+  // Young bodies bounce back when nothing is wrong.
+  if (!L.illnesses.length && L.age < 50 && L.stats.health < 90) adjust(L, { health: rnd(0, 3) });
+  const sick = L.age < 5 ? 0.08 : L.age < 40 ? 0.1 : 0.1 + (L.age - 40) * 0.003;
   if (roll(sick)) {
     const id = randomIllness(L.age);
     if (!L.illnesses.includes(id)) {
       L.illnesses.push(id);
-      record(L, `🤒 I was diagnosed with ${Illnesses[id].name}.`);
+      notify(L, "🤒", "Diagnosis", `🤒 I was diagnosed with ${Illnesses[id].name}.`);
       adjust(L, { happiness: -5, health: -5 });
     }
   }
@@ -532,7 +546,7 @@ function progressSchool(L) {
   if (inGradeSchool(L)) L.schoolGrades = clamp(L.schoolGrades + idiv(L.stats.smarts - 50, 10) + rnd(-8, 8), 0, 100);
   if (L.age === 18 && !L.droppedOut && !inPrison(L)) {
     if (eduRank(L.education) < 1) L.education = "highSchool";
-    record(L, `I graduated from high school with a ${gradeLetter(L.schoolGrades)} average.`);
+    notify(L, "🎓", "Graduation", `I graduated from high school with a ${gradeLetter(L.schoolGrades)} average.`);
     adjust(L, { happiness: 8 });
   }
   const e = L.enrollment;
@@ -545,12 +559,12 @@ function progressSchool(L) {
   if (e.kind === "university") {
     if (eduRank(L.education) < 2) L.education = "bachelor";
     L.major = e.major;
-    record(L, `🎓 I graduated from university with a degree in ${e.major}!`);
+    notify(L, "🎓", "Graduation", `🎓 I graduated from university with a degree in ${e.major}!`);
   } else {
     L.education = "graduate";
     if (!L.graduateDegrees.includes(e.field)) L.graduateDegrees.push(e.field);
     const f = GraduateFields[e.field];
-    record(L, `🎓 I graduated from ${f.schoolName} and earned my ${f.degreeName}!`);
+    notify(L, "🎓", "Graduation", `🎓 I graduated from ${f.schoolName} and earned my ${f.degreeName}!`);
   }
   adjust(L, { happiness: 15 });
 }
@@ -560,7 +574,7 @@ function progressPrison(L) {
   L.prisonYearsLeft -= 1;
   adjust(L, { happiness: -6, health: -2 });
   if (L.prisonYearsLeft === 0) {
-    record(L, "🔓 I was released from prison.");
+    notify(L, "🔓", "Released", "🔓 I was released from prison.");
     adjust(L, { happiness: 20 });
   } else {
     record(L, `I spent another year behind bars. ${plural(L.prisonYearsLeft, "year")} left.`);
@@ -584,7 +598,7 @@ function progressCareer(L) {
   }
   if (j.performance < 15 && roll(0.5)) {
     L.job = null;
-    record(L, `❌ I was fired from my job as a ${j.title} at ${j.company}.`);
+    notify(L, "❌", "Fired", `❌ I was fired from my job as a ${j.title} at ${j.company}.`);
     adjust(L, { happiness: -15 });
     return;
   }
@@ -593,7 +607,7 @@ function progressCareer(L) {
     record(L, "🔀 I've earned the right to specialize. Time to choose my path at work.");
   }
   if (j.performance > 75 && j.yearsInLevel >= 2 && j.level < top && roll(0.3)) {
-    promote(L);
+    popup(L, "📈", "Promoted!", promote(L));
     return;
   }
   if (j.performance > 70 && j.years >= 2 && roll(0.25)) {
@@ -625,7 +639,7 @@ function progressFame(L) {
     if (roll(0.3)) {
       adjust(L, { happiness: 10 });
       L.job.performance = 100;
-      record(L, "🎖️ I was deployed overseas and awarded a medal for bravery.");
+      notify(L, "🎖️", "Medal of Honor", "🎖️ I was deployed overseas and awarded a medal for bravery.");
     } else {
       adjust(L, { happiness: -10, health: -rnd(0, 15) });
       record(L, "🪖 I was deployed overseas for a tour of duty.");
@@ -685,15 +699,15 @@ function progressRelationships(L) {
 
     if (personDies(p.age, p.kind === "pet")) {
       p.isAlive = false;
-      record(L, `🕊️ My ${relTitle(p).toLowerCase()} ${p.firstName} ${p.kind === "pet" ? "passed away" : "died"} at age ${p.age}.`);
+      notify(L, "🕊️", "Rest in Peace", `🕊️ My ${relTitle(p).toLowerCase()} ${p.firstName} ${p.kind === "pet" ? "passed away" : "died"} at age ${p.age}.`);
       adjust(L, { happiness: -(idiv(p.bond, 4) + 5) });
       if (isParent(p.kind) && p.money > 0) {
         const fullShare = idiv(p.money, Math.max(1, L.relationships.filter((s) => s.kind === "sibling" && s.isAlive).length + 1));
         const share = Math.trunc(fullShare * inheritanceShare(p));
-        if (share === 0) record(L, `📜 ${p.firstName} cut me out of the will. We were never close.`);
+        if (share === 0) notify(L, "📜", "The Will", `📜 ${p.firstName} cut me out of the will. We were never close.`);
         else {
           L.money += share;
-          record(L, `📜 I inherited ${formatMoney(share)} from ${p.firstName}${share < fullShare ? ". It would have been more if we'd been closer." : "."}`);
+          notify(L, "📜", "Inheritance", `📜 I inherited ${formatMoney(share)} from ${p.firstName}${share < fullShare ? ". It would have been more if we'd been closer." : "."}`);
         }
       }
       continue;
@@ -709,17 +723,17 @@ function progressRelationships(L) {
       if (p.kind === "spouse") {
         const settlement = Math.max(0, idiv(L.money, 2));
         L.money -= settlement;
-        record(L, `💔 ${p.firstName} divorced me and took ${formatMoney(settlement)} in the settlement.`);
-      } else record(L, `💔 ${p.firstName} broke up with me.`);
+        notify(L, "💔", "Divorced", `💔 ${p.firstName} divorced me and took ${formatMoney(settlement)} in the settlement.`);
+      } else notify(L, "💔", "Dumped", `💔 ${p.firstName} broke up with me.`);
       adjust(L, { happiness: -15 });
     }
   }
 }
 
 function progressSocial(L) {
-  adjust(L, { happiness: clamp(idiv(socialSupport(L) - 50, 10), -5, 5) });
-  if (isLonely(L) && roll(0.4)) {
-    adjust(L, { happiness: -4 });
+  adjust(L, { happiness: clamp(idiv(socialSupport(L) - 50, 10), -3, 5) });
+  if (isLonely(L) && roll(0.3)) {
+    adjust(L, { happiness: -3 });
     record(L, "😔 I've been feeling lonely. I wish I had someone to talk to.");
   }
   L.money += spouseContribution(L);
@@ -735,7 +749,7 @@ function progressSocial(L) {
     record(L, `💵 My ${relTitle(parent).toLowerCase()} gave me ${formatMoney(allowance)} in allowance.`);
   }
   if (L.age === 18 && parents.length && parents.every((p) => p.bond < 35) && !inPrison(L)) {
-    record(L, "🧳 My parents kicked me out of the house. I'm on my own now.");
+    notify(L, "🧳", "Kicked Out", "🧳 My parents kicked me out of the house. I'm on my own now.");
     adjust(L, { happiness: -12 });
   }
 
@@ -807,6 +821,7 @@ function die(L, cause) {
   L.isAlive = false;
   L.causeOfDeath = cause;
   L.pendingEvents = [];
+  L.popups = [];
   record(L, `☠️ I died from ${cause} at age ${L.age}.`);
 }
 

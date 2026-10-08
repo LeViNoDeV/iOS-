@@ -1,14 +1,25 @@
 // LifeSim random events: things that just happen, and choices the player must make.
 "use strict";
 
-const ev = (kind, data, title, message, options) => ({ id: uid(), kind, data, title, message, options });
+const EVENT_EMOJI = {
+  bully: "😠", cheatOnTest: "📝", friendship: "🤝", drugsOffer: "💊", askedOut: "💘", strayAnimal: "🐾", foundWallet: "👛",
+  streetFight: "👊", mugger: "🔪", investmentPitch: "📈", coworkerCredit: "😤", siblingNeedsMoney: "💸", prom: "💃",
+  craving: "😩", celebrity: "🌟", juryDuty: "⚖️", drunkDriving: "🍻", parentNeedsCare: "🏥", partnerProposes: "💍",
+  partnerCheated: "💔", childInTrouble: "🚨", friendNeedsHelp: "🙏", familyReunion: "👨‍👩‍👧‍👦",
+};
+const ev = (kind, data, title, message, options) => ({ id: uid(), kind, data, title, message, options, emoji: EVENT_EMOJI[kind] || SIMPLE_EVENTS[kind]?.emoji || "❗" });
 
 function generateEvents(L) {
   passiveEvent(L);
   let e = null;
-  if (roll(0.35)) e = socialEvent(L);
-  if (!e && roll(0.5)) e = choiceEvent(L);
+  if (roll(0.3)) e = socialEvent(L);
+  if (!e && roll(0.8)) e = choiceEvent(L);
   if (e) L.pendingEvents.push(e);
+  // Some years are eventful.
+  if (e && roll(0.18)) {
+    const extra = choiceEvent(L);
+    if (extra && extra.kind !== e.kind) L.pendingEvents.push(extra);
+  }
 }
 
 // MARK: Passive events
@@ -138,6 +149,13 @@ function choiceEvent(L) {
   if (age >= 21 && L.money > 5000) {
     const amount = Math.min(idiv(L.money, 2), rnd(2000, 50000));
     events.push(ev("investmentPitch", { amount }, "Investment Opportunity", `An old friend wants you to invest ${formatMoney(amount)} in their new startup.`, ["Invest", "Pass"]));
+  }
+  for (const [kind, def] of Object.entries(SIMPLE_EVENTS)) {
+    if (age < def.min || age > def.max || (def.when && !def.when(L))) continue;
+    const made = def.make ? def.make(L) : {};
+    if (!made) continue;
+    const e = ev(kind, made.data || {}, def.title, made.message || def.message, def.options);
+    for (let w = 0; w < (def.weight || 1); w++) events.push(e);
   }
   if (L.job && !L.job.partTime) {
     events.push(ev("coworkerCredit", {}, "Office Drama", "A coworker took credit for your work in front of the boss.", ["Confront them", "Tell the boss", "Let it go"]));
@@ -379,5 +397,7 @@ function outcomeText(L, event, c) {
       return "I skipped the family reunion. Nobody was thrilled about it.";
     }
   }
+  const simple = SIMPLE_EVENTS[event.kind];
+  if (simple) return simple.resolve(L, d, c);
   return "Nothing happened.";
 }

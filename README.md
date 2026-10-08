@@ -11,7 +11,7 @@ The `web/` folder has the same game as a website that runs in any modern browser
 
 No install or internet connection is needed. Fonts load from Google Fonts when you're online. Your game saves automatically in the browser. Press **Space** to age up.
 
-The web code mirrors the iOS app's game logic: `engine.js` (aging, health, money, relationships), `events.js` (random events), `actions.js` (everything you can do) and `game-data.js` (jobs, career ladders and work actions, generated from the Swift data). `ui.js` and `style.css` are the interface.
+The web code mirrors the iOS app's game logic: `engine.js` (aging, health, money, relationships), `events.js` (random events), `actions.js` (everything you can do) and `game-data.js` (jobs, career ladders and work actions, generated from the Swift data). `more-events.js` holds the extra BitLife-style popup events. `ui.js` and `style.css` are the interface.
 
 ## Requirements (iOS app)
 
