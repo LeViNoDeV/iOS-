@@ -1,13 +1,14 @@
 import SwiftUI
 
 enum MainSheet: String, Identifiable {
-    case occupation, assets, relationships, activities
+    case occupation, assets, relationships, activities, profile
     var id: String { rawValue }
 }
 
 struct MainLifeView: View {
     @EnvironmentObject private var store: GameStore
     @State private var sheet: MainSheet?
+    @State private var confirmingNewLife = false
 
     var body: some View {
         if let life = store.life {
@@ -37,10 +38,16 @@ struct MainLifeView: View {
                     case .assets: AssetsView()
                     case .relationships: RelationshipsView()
                     case .activities: ActivitiesView()
+                    case .profile: ProfileView()
                     }
                 }
                 .environmentObject(store)
                 .outcomeAlert($store.outcome)
+            }
+            .confirmationDialog("Start a new life?", isPresented: $confirmingNewLife, titleVisibility: .visible) {
+                Button("Abandon this life", role: .destructive) { store.abandonLife() }
+            } message: {
+                Text("\(life.fullName) will be sent to the graveyard.")
             }
             .outcomeAlert(Binding(
                 get: { sheet == nil ? store.outcome : nil },
@@ -51,17 +58,25 @@ struct MainLifeView: View {
 
     private func header(_ life: Life) -> some View {
         HStack(spacing: 12) {
-            Text(life.emoji)
-                .font(.system(size: 44))
-                .frame(width: 60, height: 60)
-                .background(Color.lifeBlue.opacity(0.15), in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text(life.fullName)
-                    .font(.title3.bold())
-                Text(subtitle(life))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            Button { sheet = .profile } label: {
+                HStack(spacing: 12) {
+                    Text(life.emoji)
+                        .font(.system(size: 44))
+                        .frame(width: 60, height: 60)
+                        .background(Color.lifeBlue.opacity(0.15), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(life.fullName)
+                            .font(.title3.bold())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Text(subtitle(life))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
+            .foregroundStyle(.primary)
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 Text(formatMoney(life.money))
@@ -70,6 +85,14 @@ struct MainLifeView: View {
                 Text("Bank Balance")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+            }
+            Menu {
+                Button { sheet = .profile } label: { Label("Profile", systemImage: "person.text.rectangle") }
+                Button(role: .destructive) { confirmingNewLife = true } label: { Label("New Life", systemImage: "arrow.counterclockwise") }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title2)
+                    .foregroundStyle(Color.lifeBlue)
             }
         }
         .padding()

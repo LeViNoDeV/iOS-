@@ -30,6 +30,11 @@ enum Names {
         ("Madrid", "Spain"), ("Tokyo", "Japan"), ("Dublin", "Ireland"), ("Amsterdam", "Netherlands"),
     ]
 
+    static let boats = [
+        ("Fishing Boat", 25_000), ("Speedboat", 80_000), ("Sailboat", 150_000),
+        ("Yacht", 2_500_000), ("Superyacht", 40_000_000),
+    ]
+
     static let petNames = ["Max", "Bella", "Charlie", "Luna", "Rocky", "Coco", "Buddy", "Daisy", "Milo", "Pepper"]
     static let petSpecies = ["Dog", "Cat", "Rabbit", "Parrot", "Hamster"]
 

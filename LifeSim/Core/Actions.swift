@@ -3,130 +3,111 @@ import Foundation
 // MARK: - Activities
 
 enum Activity: String, CaseIterable, Identifiable {
-    case gym, library, meditate, doctor, walk
-    case party, vacation, plasticSurgery
-    case lottery, casino
+    case gym, library, meditate, walk, martialArts, salon, diet
+    case party, bar, drugs
+    case movies, concert, vacation, plasticSurgery, lottery
 
     var id: String { rawValue }
 
+    private var info: (title: String, emoji: String, subtitle: String, minAge: Int) {
+        switch self {
+        case .gym: return ("Gym", "🏋️", "Get in shape", 12)
+        case .library: return ("Library", "📚", "Read some books", 6)
+        case .meditate: return ("Meditate", "🧘", "Find inner peace", 6)
+        case .walk: return ("Go for a Walk", "🚶", "Fresh air", 4)
+        case .martialArts: return ("Martial Arts", "🥋", "Learn to fight · $150", 6)
+        case .salon: return ("Salon & Spa", "💅", "Pamper yourself · $250", 12)
+        case .diet: return ("Go on a Diet", "🥗", "Eat healthier", 12)
+        case .party: return ("Night Club", "🪩", "Dance the night away · $100", 18)
+        case .bar: return ("Go to a Bar", "🍺", "Have a few drinks · $60", 18)
+        case .drugs: return ("Do Drugs", "💊", "A dangerous high", 14)
+        case .movies: return ("Movie Theater", "🎬", "Catch a film · $15", 5)
+        case .concert: return ("Concert", "🎤", "See a live show · $120", 12)
+        case .vacation: return ("Vacation", "🏖️", "Get away · $3,000", 18)
+        case .plasticSurgery: return ("Plastic Surgery", "💉", "Change your look · $10,000", 18)
+        case .lottery: return ("Lottery", "🎟️", "Buy a ticket · $20", 18)
+        }
+    }
+
+    var title: String { info.title }
+    var emoji: String { info.emoji }
+    var subtitle: String { info.subtitle }
+    var minAge: Int { info.minAge }
+
+    static let mindAndBody: [Activity] = [.gym, .library, .meditate, .walk, .martialArts, .salon, .diet]
+    static let nightlife: [Activity] = [.party, .bar, .drugs]
+    static let leisure: [Activity] = [.movies, .concert, .vacation, .plasticSurgery, .lottery]
+}
+
+enum CasinoGame: String, CaseIterable, Identifiable {
+    case blackjack, roulette, slots, horseRacing
+
+    var id: String { rawValue }
     var title: String {
         switch self {
-        case .gym: return "Gym"
-        case .library: return "Library"
-        case .meditate: return "Meditate"
-        case .doctor: return "Doctor"
-        case .walk: return "Go for a Walk"
-        case .party: return "Night Club"
-        case .vacation: return "Vacation"
-        case .plasticSurgery: return "Plastic Surgery"
-        case .lottery: return "Lottery"
-        case .casino: return "Casino"
+        case .blackjack: return "Blackjack"
+        case .roulette: return "Roulette"
+        case .slots: return "Slot Machines"
+        case .horseRacing: return "Horse Racing"
         }
     }
-
     var emoji: String {
         switch self {
-        case .gym: return "🏋️"
-        case .library: return "📚"
-        case .meditate: return "🧘"
-        case .doctor: return "🩺"
-        case .walk: return "🚶"
-        case .party: return "🪩"
-        case .vacation: return "🏖️"
-        case .plasticSurgery: return "💉"
-        case .lottery: return "🎟️"
-        case .casino: return "🎰"
+        case .blackjack: return "🃏"
+        case .roulette: return "🎡"
+        case .slots: return "🎰"
+        case .horseRacing: return "🏇"
+        }
+    }
+    /// (chance to win, payout multiplier)
+    var odds: (Double, Int) {
+        switch self {
+        case .blackjack: return (0.46, 2)
+        case .roulette: return (0.18, 6)
+        case .slots: return (0.05, 15)
+        case .horseRacing: return (0.12, 8)
         }
     }
 
-    var subtitle: String {
-        switch self {
-        case .gym: return "Get in shape"
-        case .library: return "Read some books"
-        case .meditate: return "Find inner peace"
-        case .doctor: return "Get a checkup · $200"
-        case .walk: return "Fresh air"
-        case .party: return "Dance the night away · $100"
-        case .vacation: return "Get away · $3,000"
-        case .plasticSurgery: return "Change your look · $10,000"
-        case .lottery: return "Buy a ticket · $20"
-        case .casino: return "Bet $1,000 on blackjack"
-        }
-    }
-
-    var minAge: Int {
-        switch self {
-        case .walk, .doctor: return 4
-        case .library, .meditate: return 6
-        case .gym: return 12
-        case .party, .vacation, .plasticSurgery, .lottery, .casino: return 18
-        }
-    }
+    static let bets = [100, 1_000, 10_000, 100_000]
 }
 
 enum Crime: String, CaseIterable, Identifiable {
-    case shoplift, pickpocket, burglary, carTheft, bankRobbery
+    case shoplift, porchPirate, pickpocket, burglary, extortion, carTheft, trainRobbery, bankRobbery
 
     var id: String { rawValue }
 
-    var title: String {
+    private var info: (title: String, emoji: String, minAge: Int, catchChance: Double, loot: ClosedRange<Int>, sentence: ClosedRange<Int>) {
         switch self {
-        case .shoplift: return "Shoplift"
-        case .pickpocket: return "Pickpocket"
-        case .burglary: return "Burglary"
-        case .carTheft: return "Grand Theft Auto"
-        case .bankRobbery: return "Rob a Bank"
+        case .shoplift: return ("Shoplift", "🛍️", 10, 0.25, 20...300, 1...1)
+        case .porchPirate: return ("Porch Pirate", "📦", 10, 0.2, 20...600, 1...1)
+        case .pickpocket: return ("Pickpocket", "👛", 10, 0.3, 10...800, 1...2)
+        case .burglary: return ("Burglary", "🏚️", 14, 0.35, 500...15_000, 2...5)
+        case .extortion: return ("Extortion", "✉️", 18, 0.4, 2_000...50_000, 2...6)
+        case .carTheft: return ("Grand Theft Auto", "🚙", 16, 0.4, 3_000...40_000, 3...8)
+        case .trainRobbery: return ("Train Robbery", "🚂", 18, 0.5, 10_000...300_000, 5...15)
+        case .bankRobbery: return ("Rob a Bank", "🏦", 18, 0.6, 50_000...2_000_000, 10...30)
         }
     }
 
-    var emoji: String {
-        switch self {
-        case .shoplift: return "🛍️"
-        case .pickpocket: return "👛"
-        case .burglary: return "🏚️"
-        case .carTheft: return "🚙"
-        case .bankRobbery: return "🏦"
-        }
-    }
-
-    var minAge: Int { self == .bankRobbery || self == .carTheft ? 16 : 10 }
-    var catchChance: Double {
-        switch self {
-        case .shoplift: return 0.25
-        case .pickpocket: return 0.3
-        case .burglary: return 0.35
-        case .carTheft: return 0.4
-        case .bankRobbery: return 0.6
-        }
-    }
-    var loot: ClosedRange<Int> {
-        switch self {
-        case .shoplift: return 20...300
-        case .pickpocket: return 10...800
-        case .burglary: return 500...15_000
-        case .carTheft: return 3_000...40_000
-        case .bankRobbery: return 50_000...2_000_000
-        }
-    }
-    var sentence: ClosedRange<Int> {
-        switch self {
-        case .shoplift: return 1...1
-        case .pickpocket: return 1...2
-        case .burglary: return 2...5
-        case .carTheft: return 3...8
-        case .bankRobbery: return 10...30
-        }
-    }
+    var title: String { info.title }
+    var emoji: String { info.emoji }
+    var minAge: Int { info.minAge }
+    var catchChance: Double { info.catchChance }
+    var loot: ClosedRange<Int> { info.loot }
+    var sentence: ClosedRange<Int> { info.sentence }
 }
 
 enum PrisonAction: String, CaseIterable, Identifiable {
-    case workout, study, riot, escape
+    case workout, study, appeal, bribe, riot, escape
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .workout: return "Work Out in the Yard"
         case .study: return "Study in the Prison Library"
+        case .appeal: return "Appeal My Sentence ($5,000)"
+        case .bribe: return "Bribe the Warden ($25,000)"
         case .riot: return "Start a Riot"
         case .escape: return "Attempt an Escape"
         }
@@ -135,6 +116,8 @@ enum PrisonAction: String, CaseIterable, Identifiable {
         switch self {
         case .workout: return "💪"
         case .study: return "📖"
+        case .appeal: return "⚖️"
+        case .bribe: return "💵"
         case .riot: return "🔥"
         case .escape: return "🏃"
         }
@@ -144,6 +127,7 @@ enum PrisonAction: String, CaseIterable, Identifiable {
 enum RelationshipAction: String, CaseIterable, Identifiable {
     case spendTime, conversation, compliment, gift, askForMoney, argue
     case propose, marry, haveBaby, breakUp, play, walkPet
+    case insult, prank, assault, murder
 
     var id: String { rawValue }
     var title: String {
@@ -160,6 +144,17 @@ enum RelationshipAction: String, CaseIterable, Identifiable {
         case .breakUp: return "Break Up"
         case .play: return "Play"
         case .walkPet: return "Go for a Walk"
+        case .insult: return "Insult"
+        case .prank: return "Prank"
+        case .assault: return "Assault 👊"
+        case .murder: return "Murder 🔪"
+        }
+    }
+
+    var isHostile: Bool {
+        switch self {
+        case .argue, .breakUp, .insult, .prank, .assault, .murder: return true
+        default: return false
         }
     }
 }
@@ -174,6 +169,7 @@ extension Life {
         switch activity {
         case .gym:
             let gain = Int.random(in: 1...6)
+            bump(.gym)
             adjust(happiness: 2, health: gain, looks: Int.random(in: 0...3))
             message = "I had a great workout at the gym. Health +\(gain)."
         case .library:
@@ -187,13 +183,31 @@ extension Life {
         case .walk:
             adjust(happiness: 2, health: 1)
             message = "I went for a relaxing walk around \(city)."
-        case .doctor:
-            money -= 200
-            let gain = Int.random(in: 5...15)
-            adjust(health: gain)
-            message = "The doctor gave me a checkup and some medicine. Health +\(gain)."
+        case .martialArts:
+            money -= 150
+            if roll(0.1) {
+                adjust(health: -8)
+                message = "I got hurt sparring at my martial arts class."
+            } else {
+                adjust(happiness: 3, health: Int.random(in: 2...5))
+                message = "I trained hard at my \(["karate", "judo", "kung fu", "taekwondo", "jiu-jitsu"].randomElement()!) class."
+            }
+        case .salon:
+            money -= 250
+            adjust(happiness: 6, looks: Int.random(in: 1...4))
+            message = "I got pampered at the salon and spa. I look fabulous."
+        case .diet:
+            let diet = ["keto", "vegan", "Mediterranean", "paleo", "intermittent fasting"].randomElement()!
+            if roll(0.7) {
+                adjust(health: Int.random(in: 2...6), looks: Int.random(in: 0...3))
+                message = "I stuck to a \(diet) diet and feel great."
+            } else {
+                adjust(happiness: -3)
+                message = "I tried a \(diet) diet but gave up after a week."
+            }
         case .party:
             money -= 100
+            bump(.parties)
             if roll(0.15) {
                 adjust(happiness: 5, health: -8)
                 message = "I partied too hard and woke up with a terrible hangover."
@@ -201,6 +215,38 @@ extension Life {
                 adjust(happiness: Int.random(in: 6...12))
                 message = "I danced the night away at the club!"
             }
+        case .bar:
+            money -= 60
+            bump(.parties)
+            adjust(happiness: Int.random(in: 3...8), health: -2)
+            var text = "I had a few drinks at a local bar."
+            if !addictions.contains(.alcohol) && roll(0.08) {
+                addictions.append(.alcohol)
+                text += " I think I'm developing a drinking problem."
+            }
+            message = text
+        case .drugs:
+            money -= 100
+            if roll(0.04) {
+                die(cause: "a drug overdose")
+                message = "I overdosed."
+            } else {
+                adjust(happiness: Int.random(in: 8...15), health: -Int.random(in: 5...12), smarts: -2)
+                var text = "I got high on \(["ecstasy", "cocaine", "mushrooms", "pills"].randomElement()!)."
+                if !addictions.contains(.drugs) && roll(0.25) {
+                    addictions.append(.drugs)
+                    text += " I'm hooked."
+                }
+                message = text
+            }
+        case .movies:
+            money -= 15
+            adjust(happiness: Int.random(in: 3...7))
+            message = "I watched \(["an action movie", "a romantic comedy", "a horror film", "an animated movie", "a documentary"].randomElement()!) at the movie theater."
+        case .concert:
+            money -= 120
+            adjust(happiness: Int.random(in: 6...12))
+            message = "I went to an amazing \(["rock", "pop", "hip-hop", "jazz", "country"].randomElement()!) concert."
         case .vacation:
             money -= 3_000
             let place = Names.places.randomElement()!
@@ -221,6 +267,7 @@ extension Life {
             if roll(0.0005) {
                 let jackpot = Int.random(in: 5_000_000...150_000_000)
                 money += jackpot
+                bump(.lotteryWins)
                 adjust(happiness: 50)
                 message = "🎉 I WON THE LOTTERY JACKPOT: \(formatMoney(jackpot))!"
             } else if roll(0.03) {
@@ -230,25 +277,41 @@ extension Life {
             } else {
                 message = "My lottery ticket was a dud."
             }
-        case .casino:
-            if roll(0.46) {
-                money += 1_000
-                adjust(happiness: 10)
-                message = "I won $1,000 at blackjack!"
-            } else {
-                money -= 1_000
-                adjust(happiness: -6)
-                message = "I lost $1,000 at blackjack."
-            }
         }
         record(message)
         return Outcome(title: activity.title, message: message)
+    }
+
+    mutating func gamble(_ game: CasinoGame, bet: Int) -> Outcome {
+        guard money >= bet else {
+            return Outcome(title: game.title, message: "I don't have \(formatMoney(bet)) to bet.")
+        }
+        let (chance, multiplier) = game.odds
+        let message: String
+        if roll(chance) {
+            let winnings = bet * (multiplier - 1)
+            money += winnings
+            adjust(happiness: 12)
+            message = "\(game.emoji) I bet \(formatMoney(bet)) on \(game.title.lowercased()) and WON \(formatMoney(winnings))!"
+        } else {
+            money -= bet
+            adjust(happiness: -8)
+            message = "\(game.emoji) I bet \(formatMoney(bet)) on \(game.title.lowercased()) and lost it all."
+        }
+        var text = message
+        if !addictions.contains(.gambling) && roll(0.05) {
+            addictions.append(.gambling)
+            text += " I can't stop thinking about my next bet..."
+        }
+        record(text)
+        return Outcome(title: game.title, message: text)
     }
 
     // MARK: Crime
 
     mutating func commit(_ crime: Crime) -> Outcome {
         karma -= 5
+        bump(.crimes)
         if roll(crime.catchChance) {
             let years = Int.random(in: crime.sentence)
             criminalRecord.append(crime.title)
@@ -293,6 +356,29 @@ extension Life {
         case .study:
             adjust(smarts: .random(in: 2...5))
             message = "I read some books in the prison library."
+        case .appeal:
+            money -= 5_000
+            if roll(0.2) {
+                prisonYearsLeft = 0
+                adjust(happiness: 25)
+                message = "⚖️ My lawyer won the appeal! I'm a free person."
+            } else {
+                adjust(happiness: -5)
+                message = "My appeal was denied."
+            }
+        case .bribe:
+            guard money >= 25_000 else {
+                return Outcome(title: action.title, message: "I don't have enough money to bribe the warden.")
+            }
+            money -= 25_000
+            if roll(0.35) {
+                prisonYearsLeft = 0
+                adjust(happiness: 25)
+                message = "💵 The warden took my bribe and quietly released me."
+            } else {
+                prisonYearsLeft += 2
+                message = "The warden took my money AND reported me. 2 years were added to my sentence."
+            }
         case .riot:
             if roll(0.3) {
                 prisonYearsLeft += 2
@@ -393,7 +479,7 @@ extension Life {
         if template.partTime {
             return age < 18 || enrollment != nil || job == nil
         }
-        if age < 18 { return false }
+        if age < 18 || age > template.maxAge || stats.health < template.minHealth { return false }
         if education < template.requiredEducation { return false }
         if let field = template.requiredField, !graduateDegrees.contains(field) { return false }
         if let required = template.requiredMajor, major != required { return false }
@@ -419,7 +505,9 @@ extension Life {
         var chance = 0.55 + Double(stats.smarts - template.minSmarts) / 200
         if stats.smarts < template.minSmarts { chance -= 0.3 }
         if stats.looks < template.minLooks { chance = 0.02 }
-        if !criminalRecord.isEmpty && !template.partTime { chance -= 0.2 }
+        if !criminalRecord.isEmpty && !template.partTime && !template.famous { chance -= 0.2 }
+        if template.famous { chance = 0.15 + Double(stats.looks + stats.smarts) / 400 + Double(fame) / 200 }
+        if template.military { chance = 0.85 }
         guard roll(chance.clamped(to: 0.05...0.95)) else {
             let message = "I interviewed for the \(template.title) position at \(company), but they didn't hire me."
             record(message)
@@ -491,7 +579,10 @@ extension Life {
         var list: [RelationshipAction] = [.spendTime, .conversation, .compliment]
         if age >= 10 { list.append(.gift) }
         if person.kind.isParent || person.kind.isRomantic { list.append(.askForMoney) }
-        list.append(.argue)
+        list += [.argue, .insult]
+        if age >= 6 { list.append(.prank) }
+        if age >= 14 { list.append(.assault) }
+        if age >= 16 { list.append(.murder) }
         switch person.kind {
         case .partner:
             if age >= 18 { list.append(.propose) }
@@ -595,6 +686,54 @@ extension Life {
             updateRelationship(id) { $0.bond += .random(in: 3...8) }
             adjust(happiness: 3, health: 2)
             message = "I took \(name) for a walk."
+        case .insult:
+            updateRelationship(id) { $0.bond -= .random(in: 6...14) }
+            karma -= 1
+            message = "I called \(name) \(["a loser", "ugly", "a waste of space", "boring", "a clown"].randomElement()!)."
+        case .prank:
+            if roll(0.6) {
+                updateRelationship(id) { $0.bond += 2 }
+                adjust(happiness: 5)
+                message = "I pranked \(name) and we both laughed about it."
+            } else {
+                updateRelationship(id) { $0.bond -= 10 }
+                message = "I pranked \(name). \(person.gender.subject.capitalized) did NOT find it funny."
+            }
+        case .assault:
+            karma -= 8
+            bump(.crimes)
+            updateRelationship(id) { $0.bond -= 40 }
+            if roll(0.35) && age >= 18 {
+                criminalRecord.append("Assault")
+                sendToPrison(years: .random(in: 1...3))
+                message = "I attacked \(name). \(person.gender.subject.capitalized) pressed charges and I was sent to prison for \(prisonYearsLeft) year(s)."
+            } else {
+                adjust(health: -Int.random(in: 0...8))
+                message = "I got into a fistfight with \(name) and beat \(person.gender.object) up."
+            }
+        case .murder:
+            karma -= 40
+            bump(.crimes)
+            if roll(0.55) {
+                bump(.murders)
+                updateRelationship(id) { $0.isAlive = false }
+                if roll(0.45) {
+                    criminalRecord.append("Murder")
+                    sendToPrison(years: .random(in: 25...60))
+                    message = "🔪 I murdered \(name). The police caught me and I was sentenced to \(prisonYearsLeft) years in prison."
+                } else {
+                    message = "🔪 I murdered \(name) and got away with it... for now."
+                }
+            } else {
+                updateRelationship(id) { $0.bond = 0 }
+                if roll(0.5) && age >= 18 {
+                    criminalRecord.append("Attempted Murder")
+                    sendToPrison(years: .random(in: 8...20))
+                    message = "I tried to kill \(name) but failed. I was sentenced to \(prisonYearsLeft) years for attempted murder."
+                } else {
+                    message = "I tried to kill \(name) but \(person.gender.subject) escaped."
+                }
+            }
         }
         record(message)
         return Outcome(title: person.fullName, message: message)
@@ -602,8 +741,9 @@ extension Life {
 
     var canFindDate: Bool { age >= 16 && romanticPartner == nil && !inPrison }
 
-    mutating func findDate() -> Outcome {
-        let gender: Gender = self.gender == .male ? .female : .male
+    mutating func findDate(gender: Gender? = nil) -> Outcome {
+        if let gender = gender { datingPreference = gender }
+        let gender = preferredGender
         let odds = 0.35 + Double(stats.looks) / 200
         guard roll(odds) else {
             let message = "I went looking for love, but struck out."
@@ -613,6 +753,7 @@ extension Life {
         }
         let person = Names.person(kind: .partner, age: max(16, age + .random(in: -5...5)), gender: gender, bond: .random(in: 50...80))
         relationships.append(person)
+        bump(.partners)
         adjust(happiness: 10)
         let message = "❤️ I met \(person.fullName) (\(person.age)) and we started dating!"
         record(message)
@@ -631,22 +772,39 @@ extension Life {
     // MARK: Assets
 
     static func marketListings(kind: AssetKind) -> [AssetListing] {
-        let source = kind == .house ? Names.houses : Names.cars
+        let source: [(String, Int)]
+        switch kind {
+        case .house: source = Names.houses
+        case .car: source = Names.cars
+        case .boat: source = Names.boats
+        }
         return source.map { item in
             let price = Int(Double(item.1) * Double.random(in: 0.85...1.2)) / 100 * 100
             return AssetListing(kind: kind, name: item.0, price: price)
         }
     }
 
-    mutating func buy(_ listing: AssetListing) -> Outcome {
+    /// Whether a bank would lend for this purchase (20% down, steady job).
+    func canFinance(_ listing: AssetListing) -> Bool {
+        listing.kind == .house && job != nil && !(job?.partTime ?? true) && money >= listing.price / 5
+            && (job?.salary ?? 0) * 6 >= listing.price
+    }
+
+    mutating func buy(_ listing: AssetListing, financed: Bool = false) -> Outcome {
         guard age >= 18 else { return Outcome(title: "Too Young", message: "I'm too young to buy that.") }
-        guard money >= listing.price else {
-            return Outcome(title: "Can't Afford", message: "I can't afford the \(listing.name). I need \(formatMoney(listing.price)).")
+        if listing.kind == .car && !hasDriversLicense {
+            return Outcome(title: "No License", message: "I need a driver's license before I can buy a car.")
         }
-        money -= listing.price
-        assets.append(Asset(kind: listing.kind, name: listing.name, purchasePrice: listing.price, value: listing.price))
+        let downPayment = financed ? listing.price / 5 : listing.price
+        guard money >= downPayment, !financed || canFinance(listing) else {
+            return Outcome(title: "Can't Afford", message: "I can't afford the \(listing.name). I need \(formatMoney(downPayment)).")
+        }
+        money -= downPayment
+        assets.append(Asset(kind: listing.kind, name: listing.name, purchasePrice: listing.price, value: listing.price, loan: listing.price - downPayment))
         adjust(happiness: 10)
-        let message = "I bought a \(listing.name) for \(formatMoney(listing.price))!"
+        let message = financed
+            ? "I bought a \(listing.name) with a \(formatMoney(listing.price - downPayment)) mortgage!"
+            : "I bought a \(listing.name) for \(formatMoney(listing.price))!"
         record(message)
         return Outcome(title: "Purchased", message: message)
     }
@@ -656,8 +814,9 @@ extension Life {
             return Outcome(title: "Oops", message: "I don't own that anymore.")
         }
         let asset = assets.remove(at: index)
-        money += asset.value
-        let message = "I sold my \(asset.name) for \(formatMoney(asset.value))."
+        money += asset.value - asset.loan
+        let payoff = asset.loan > 0 ? " After paying off the loan I kept \(formatMoney(asset.value - asset.loan))." : ""
+        let message = "I sold my \(asset.name) for \(formatMoney(asset.value)).\(payoff)"
         record(message)
         return Outcome(title: "Sold", message: message)
     }

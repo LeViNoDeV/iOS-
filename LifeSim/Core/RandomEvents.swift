@@ -92,8 +92,59 @@ enum RandomEvents {
                 options: ["Take them", "Say no"]
             ))
         }
+        if age == 17 {
+            var date = Names.person(kind: .partner, age: 17, gender: life.preferredGender, bond: .random(in: 50...80))
+            date.money = 0
+            events.append(PendingEvent(
+                kind: .prom(date),
+                title: "Prom Night",
+                message: "\(date.fullName) asked you to prom!",
+                options: ["Go together", "Go with friends", "Skip prom"]
+            ))
+        }
+        if age >= 18, let sibling = life.relationships.filter({ $0.kind == .sibling && $0.isAlive && $0.age >= 18 }).randomElement() {
+            let amount = Int.random(in: 500...10_000)
+            events.append(PendingEvent(
+                kind: .siblingNeedsMoney(name: sibling.firstName, amount: amount),
+                title: "Family Favor",
+                message: "Your \(sibling.title.lowercased()) \(sibling.firstName) is broke and asks to borrow \(formatMoney(amount)).",
+                options: ["Lend it", "Refuse"]
+            ))
+        }
+        if let addiction = life.addictions.randomElement() {
+            events.append(PendingEvent(
+                kind: .craving(addiction),
+                title: "Craving",
+                message: "Your \(addiction.name.lowercased()) is acting up. You feel a powerful urge.",
+                options: ["Give in", "Resist"]
+            ))
+        }
+        if age >= 10 {
+            events.append(PendingEvent(
+                kind: .celebrity,
+                title: "Celebrity Sighting",
+                message: "You spot a famous movie star at a coffee shop.",
+                options: ["Ask for a selfie", "Leave them alone", "Insult them"]
+            ))
+        }
+        if age >= 18 && !life.inPrison {
+            events.append(PendingEvent(
+                kind: .juryDuty,
+                title: "Jury Duty",
+                message: "You've been summoned for jury duty.",
+                options: ["Serve", "Ignore the summons"]
+            ))
+        }
+        if life.hasDriversLicense && life.assets.contains(where: { $0.kind == .car }) && (life.addictions.contains(.alcohol) || roll(0.3)) {
+            events.append(PendingEvent(
+                kind: .drunkDriving,
+                title: "One Too Many",
+                message: "You had a few drinks at a friend's party and your car is parked outside.",
+                options: ["Drive home", "Call a cab"]
+            ))
+        }
         if (16...60).contains(age) && life.romanticPartner == nil {
-            let gender: Gender = life.gender == .male ? .female : .male
+            let gender = life.preferredGender
             var person = Names.person(kind: .partner, age: max(16, age + .random(in: -4...4)), gender: gender, bond: .random(in: 50...80))
             person.money = .random(in: 0...150_000)
             events.append(PendingEvent(
@@ -207,6 +258,7 @@ extension Life {
         case .askedOut(let person):
             if choice == 0 {
                 relationships.append(person)
+                bump(.partners)
                 adjust(happiness: 10)
                 return "I started dating \(person.fullName)."
             }
@@ -291,6 +343,97 @@ extension Life {
             default:
                 adjust(happiness: -4); return "I let my coworker take the credit."
             }
+
+        case .siblingNeedsMoney(let name, let amount):
+            if let sibling = relationships.first(where: { $0.firstName == name && $0.kind == .sibling }) {
+                if choice == 0 {
+                    money -= amount
+                    karma += 3
+                    updateRelationship(sibling.id) { $0.bond += 15; $0.money += amount }
+                    return "I lent \(name) \(formatMoney(amount)). \(sibling.gender.subject.capitalized) was very grateful."
+                }
+                updateRelationship(sibling.id) { $0.bond -= 12 }
+            }
+            return "I refused to lend \(name) any money."
+
+        case .prom(let date):
+            switch choice {
+            case 0:
+                relationships.append(date)
+                bump(.partners)
+                bump(.parties)
+                adjust(happiness: 15)
+                popularity = min(100, popularity + 8)
+                return "I went to prom with \(date.firstName) and we started dating! 💃"
+            case 1:
+                adjust(happiness: 8)
+                bump(.parties)
+                return "I went to prom with my friends and had a blast."
+            default:
+                adjust(happiness: -3)
+                return "I skipped prom and stayed home."
+            }
+
+        case .craving(let addiction):
+            if choice == 0 {
+                adjust(happiness: 6, health: -6)
+                money -= 500
+                return "I gave in to my \(addiction.name.lowercased())."
+            }
+            if roll(0.3) {
+                addictions.removeAll { $0 == addiction }
+                adjust(happiness: 10)
+                return "I resisted the urge and finally beat my \(addiction.name.lowercased())!"
+            }
+            adjust(happiness: -3)
+            return "I resisted the urge. It wasn't easy."
+
+        case .celebrity:
+            switch choice {
+            case 0:
+                if roll(0.7) {
+                    followers += Int.random(in: 50...2_000)
+                    adjust(happiness: 8)
+                    return "The celebrity happily took a selfie with me. My followers loved it!"
+                }
+                adjust(happiness: -4)
+                return "The celebrity's bodyguard pushed me away."
+            case 1:
+                return "I let the celebrity enjoy their coffee in peace."
+            default:
+                karma -= 2
+                return "I told the celebrity their last movie was garbage."
+            }
+
+        case .juryDuty:
+            if choice == 0 {
+                karma += 2
+                money += 300
+                return "I served on a jury and helped reach a verdict."
+            }
+            if roll(0.3) {
+                money -= 1_000
+                return "I ignored my jury summons and was fined $1,000."
+            }
+            return "I ignored my jury summons and nobody noticed."
+
+        case .drunkDriving:
+            if choice == 0 {
+                karma -= 5
+                if roll(0.1) {
+                    die(cause: "a drunk-driving crash")
+                    return "I crashed my car on the way home."
+                }
+                if roll(0.25) {
+                    criminalRecord.append("DUI")
+                    hasDriversLicense = false
+                    money -= 5_000
+                    return "I was pulled over for drunk driving. I lost my license and paid a $5,000 fine."
+                }
+                return "I drove home drunk and somehow made it."
+            }
+            money -= 40
+            return "I took a cab home. Better safe than sorry."
         }
     }
 }

@@ -3,6 +3,8 @@ import SwiftUI
 struct RelationshipsView: View {
     @EnvironmentObject private var store: GameStore
     @Environment(\.dismiss) private var dismiss
+    @State private var choosingDateGender = false
+    @State private var choosingPet = false
 
     var body: some View {
         if let life = store.life {
@@ -10,8 +12,23 @@ struct RelationshipsView: View {
                 if !life.inPrison {
                     Section {
                         if life.canFindDate {
-                            Button { store.run { $0.findDate() } } label: {
+                            Button { choosingDateGender = true } label: {
                                 ActionRow(emoji: "❤️", title: "Find a Date", subtitle: "Look for love")
+                            }
+                        }
+                        if life.canHookUp {
+                            Button { store.run { $0.hookUp() } } label: {
+                                ActionRow(emoji: "🔥", title: "Hook Up", subtitle: life.romanticPartner == nil ? "No strings attached" : "Cheat on your partner...")
+                            }
+                        }
+                        if life.age >= 8 {
+                            Button { choosingPet = true } label: {
+                                ActionRow(emoji: "🐾", title: "Pet Shelter", subtitle: "Adopt a pet · $200")
+                            }
+                        }
+                        if life.canAdoptChild {
+                            Button { store.run { $0.adoptChild() } } label: {
+                                ActionRow(emoji: "🍼", title: "Adopt a Child", subtitle: "Agency fees · $10,000")
                             }
                         }
                         if life.age >= 5 {
@@ -27,6 +44,15 @@ struct RelationshipsView: View {
                 group("Children", life.relationships.filter { $0.kind == .child })
                 group("Friends", life.relationships.filter { $0.kind == .friend })
                 group("Pets", life.relationships.filter { $0.kind == .pet })
+            }
+            .confirmationDialog("Who are you interested in?", isPresented: $choosingDateGender, titleVisibility: .visible) {
+                Button("Men") { store.run { $0.findDate(gender: .male) } }
+                Button("Women") { store.run { $0.findDate(gender: .female) } }
+            }
+            .confirmationDialog("Adopt a pet", isPresented: $choosingPet, titleVisibility: .visible) {
+                ForEach(Names.petSpecies, id: \.self) { species in
+                    Button("\(petEmoji[species] ?? "🐾") \(species)") { store.run { $0.adoptPet(species) } }
+                }
             }
             .navigationTitle("Relationships")
             .navigationBarTitleDisplayMode(.inline)
@@ -110,7 +136,7 @@ struct RelationshipDetailView: View {
                                 store.run { $0.perform(action, with: personID) }
                             } label: {
                                 Text(action.title)
-                                    .foregroundStyle(action == .argue || action == .breakUp ? Color.red : Color.primary)
+                                    .foregroundStyle(action.isHostile ? Color.red : Color.primary)
                             }
                         }
                     }

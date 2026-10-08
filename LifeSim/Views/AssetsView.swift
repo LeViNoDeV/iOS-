@@ -25,7 +25,7 @@ struct AssetsView: View {
                             Text(asset.emoji).font(.title2)
                             VStack(alignment: .leading) {
                                 Text(asset.name).font(.body.weight(.medium))
-                                Text("Bought for \(formatMoney(asset.purchasePrice))")
+                                Text(asset.loan > 0 ? "Loan: \(formatMoney(asset.loan))" : "Bought for \(formatMoney(asset.purchasePrice))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -58,7 +58,12 @@ struct AssetsView: View {
                         NavigationLink {
                             MarketView(kind: .car)
                         } label: {
-                            ActionRow(emoji: "🚘", title: "Car Dealership", subtitle: "Buy a ride")
+                            ActionRow(emoji: "🚘", title: "Car Dealership", subtitle: life.hasDriversLicense ? "Buy a ride" : "Requires a driver's license")
+                        }
+                        NavigationLink {
+                            MarketView(kind: .boat)
+                        } label: {
+                            ActionRow(emoji: "⛵", title: "Boat Dealership", subtitle: "Hit the water")
                         }
                     }
                 }
@@ -78,6 +83,7 @@ struct MarketView: View {
     @EnvironmentObject private var store: GameStore
     let kind: AssetKind
     @State private var listings: [AssetListing] = []
+    @State private var pending: AssetListing?
 
     var body: some View {
         List {
@@ -86,13 +92,17 @@ struct MarketView: View {
             }
             Section {
                 ForEach(listings) { listing in
-                    let affordable = (store.life?.money ?? 0) >= listing.price
+                    let canFinance = store.life?.canFinance(listing) ?? false
+                    let affordable = (store.life?.money ?? 0) >= listing.price || canFinance
                     Button {
-                        store.run { $0.buy(listing) }
-                        listings.removeAll { $0.id == listing.id }
+                        if canFinance {
+                            pending = listing
+                        } else {
+                            buy(listing, financed: false)
+                        }
                     } label: {
                         HStack {
-                            Text(kind == .house ? "🏠" : "🚗").font(.title2)
+                            Text(kind.emoji).font(.title2)
                             Text(listing.name).font(.body.weight(.medium))
                             Spacer()
                             Text(formatMoney(listing.price))
@@ -105,7 +115,34 @@ struct MarketView: View {
                 }
             }
         }
-        .navigationTitle(kind == .house ? "Real Estate" : "Car Dealership")
+        .confirmationDialog(
+            pending.map { "Buy the \($0.name)?" } ?? "",
+            isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+            titleVisibility: .visible,
+            presenting: pending
+        ) { listing in
+            if (store.life?.money ?? 0) >= listing.price {
+                Button("Pay \(formatMoney(listing.price)) cash") { buy(listing, financed: false) }
+            }
+            Button("Mortgage (\(formatMoney(listing.price / 5)) down)") { buy(listing, financed: true) }
+        }
+        .navigationTitle(title)
         .onAppear { if listings.isEmpty { listings = Life.marketListings(kind: kind) } }
+    }
+
+    private var title: String {
+        switch kind {
+        case .house: return "Real Estate"
+        case .car: return "Car Dealership"
+        case .boat: return "Boat Dealership"
+        }
+    }
+
+    private func buy(_ listing: AssetListing, financed: Bool) {
+        let owned = store.life?.assets.count ?? 0
+        store.run { $0.buy(listing, financed: financed) }
+        if (store.life?.assets.count ?? 0) > owned {
+            listings.removeAll { $0.id == listing.id }
+        }
     }
 }

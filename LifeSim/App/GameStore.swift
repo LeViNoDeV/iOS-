@@ -29,6 +29,22 @@ final class GameStore: ObservableObject {
         save()
     }
 
+    /// Continues the family line as one of the dead player's children.
+    func continueAs(_ child: Relationship) {
+        guard let current = life, !current.isAlive else { return }
+        life = current.continueAs(child)
+        outcome = nil
+        save()
+    }
+
+    /// Abandons the current life (it goes to the graveyard) and returns to the start screen.
+    func abandonLife() {
+        guard var current = life, current.isAlive else { return }
+        current.causeOfDeath = "unknown causes"
+        graveyard.insert(current.summary(), at: 0)
+        endLife()
+    }
+
     func endLife() {
         life = nil
         outcome = nil

@@ -57,9 +57,9 @@ struct NewLifeView: View {
                     Section("Graveyard") {
                         ForEach(store.graveyard) { past in
                             HStack {
-                                Text("🪦")
+                                Text(past.ribbon?.emoji ?? "🪦")
                                 VStack(alignment: .leading) {
-                                    Text(past.name).font(.body.weight(.medium))
+                                    Text(past.name + ((past.generation ?? 1) > 1 ? " (Gen \(past.generation ?? 1))" : "")).font(.body.weight(.medium))
                                     Text("Died at \(past.ageAtDeath) from \(past.causeOfDeath)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -91,6 +91,18 @@ struct DeathView: View {
                 Text("Died at age \(life.age) from \(life.causeOfDeath ?? "unknown causes").")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                let ribbon = life.ribbon
+                VStack(spacing: 4) {
+                    Text(ribbon.emoji).font(.system(size: 44))
+                    Text("\(ribbon.title) Ribbon").font(.headline)
+                    Text(ribbon.blurb).font(.subheadline).foregroundStyle(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal)
 
                 VStack(spacing: 10) {
                     summaryRow("Net Worth", formatMoney(life.netWorth))
@@ -104,6 +116,28 @@ struct DeathView: View {
                 .padding()
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal)
+
+                if !life.heirs.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("Continue as your child").font(.headline)
+                        ForEach(life.heirs) { child in
+                            Button {
+                                store.continueAs(child)
+                            } label: {
+                                HStack {
+                                    Text(child.emoji)
+                                    Text("\(child.fullName), \(child.age)")
+                                    Spacer()
+                                    Image(systemName: "arrow.right.circle.fill")
+                                }
+                                .padding()
+                                .background(Color.lifeBlue.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                            }
+                            .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
 
                 Button {
                     store.endLife()

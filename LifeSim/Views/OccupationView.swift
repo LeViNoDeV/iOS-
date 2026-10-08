@@ -5,12 +5,16 @@ struct OccupationView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var openings: [JobOpening] = []
     @State private var choosingMajor = false
+    @State private var choosingClub = false
 
     var body: some View {
         if let life = store.life {
             List {
                 educationSection(life)
                 careerSection(life)
+                if life.age >= 10 && !life.inPrison {
+                    gigsSection(life)
+                }
                 if life.age >= 14 && !life.inPrison {
                     jobsSection(life)
                 }
@@ -29,6 +33,13 @@ struct OccupationView: View {
                 }
             }
             .onAppear { if openings.isEmpty { openings = life.jobListings() } }
+            .confirmationDialog("Join a club", isPresented: $choosingClub, titleVisibility: .visible) {
+                ForEach(schoolClubs, id: \.name) { club in
+                    Button("\(club.emoji) \(club.name)") {
+                        store.run { $0.joinClub(club.name) }
+                    }
+                }
+            }
             .confirmationDialog("Choose a major", isPresented: $choosingMajor, titleVisibility: .visible) {
                 ForEach(universityMajors, id: \.self) { major in
                     Button(major) {
@@ -62,6 +73,18 @@ struct OccupationView: View {
                 Button { store.run { $0.studyHarder() } } label: {
                     ActionRow(emoji: "📝", title: "Study Harder", subtitle: "Improve your grades")
                 }
+                if life.inGradeSchool {
+                    LabeledContent("Popularity", value: "\(life.popularity)%")
+                    if !life.clubs.isEmpty {
+                        LabeledContent("Clubs", value: life.clubs.joined(separator: ", "))
+                    }
+                    Button { choosingClub = true } label: {
+                        ActionRow(emoji: "🏫", title: "Join a Club", subtitle: "Sports, drama, debate & more")
+                    }
+                    Button { store.run { $0.skipSchool() } } label: {
+                        ActionRow(emoji: "🛹", title: "Skip School")
+                    }
+                }
                 if life.age >= 16 || life.enrollment != nil {
                     Button(role: .destructive) { store.run { $0.dropOut() } } label: {
                         ActionRow(emoji: "🚪", title: "Drop Out")
@@ -94,6 +117,9 @@ struct OccupationView: View {
                 LabeledContent("Company", value: job.company)
                 LabeledContent("Salary", value: "\(formatMoney(job.salary))/yr")
                 LabeledContent("Years", value: "\(job.years)")
+                if life.fame > 0 {
+                    StatBar(label: "Fame", emoji: "⭐", value: life.fame)
+                }
                 VStack(alignment: .leading) {
                     StatBar(label: "Performance", emoji: "📊", value: job.performance)
                 }
@@ -119,6 +145,29 @@ struct OccupationView: View {
         }
     }
 
+    // MARK: Gigs
+
+    private func gigsSection(_ life: Life) -> some View {
+        Section {
+            ForEach(Gig.allCases) { gig in
+                let allowed = life.canDo(gig)
+                Button { store.run { $0.work(gig) } } label: {
+                    ActionRow(
+                        emoji: gig.emoji,
+                        title: gig.title,
+                        subtitle: life.age < gig.minAge ? "Available at \(gig.minAge)" : "\(formatMoney(gig.pay.lowerBound))–\(formatMoney(gig.pay.upperBound))",
+                        enabled: allowed
+                    )
+                }
+                .disabled(!allowed)
+            }
+        } header: {
+            Text("Freelance Gigs")
+        } footer: {
+            Text("Up to 3 gigs per year. \(max(0, 3 - life.count(.gigsThisYear))) left this year.")
+        }
+    }
+
     // MARK: Job listings
 
     private func jobsSection(_ life: Life) -> some View {
@@ -130,7 +179,7 @@ struct OccupationView: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(opening.template.title + (opening.template.partTime ? " (Part-time)" : ""))
+                            Text(opening.template.title + (opening.template.partTime ? " (Part-time)" : "") + (opening.template.famous ? " ⭐" : "") + (opening.template.military ? " 🪖" : ""))
                                 .font(.body.weight(.medium))
                             Text(opening.company)
                                 .font(.caption)

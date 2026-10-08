@@ -150,6 +150,11 @@ struct JobTemplate: Identifiable, Hashable {
     var minLooks: Int = 0
     var partTime: Bool = false
     var nextTitle: String? = nil
+    /// Salary grows with fame (actors, musicians, athletes).
+    var famous: Bool = false
+    var military: Bool = false
+    var maxAge: Int = 70
+    var minHealth: Int = 0
 
     var requirementText: String {
         var parts: [String] = []
@@ -161,6 +166,9 @@ struct JobTemplate: Identifiable, Hashable {
             parts.append(requiredEducation.label)
         }
         if minLooks > 0 { parts.append("Good looks") }
+        if minHealth > 0 { parts.append("Fit & healthy") }
+        if maxAge < 70 { parts.append("Age \(minAge)–\(maxAge)") }
+        if famous { parts.append("Audition") }
         if parts.isEmpty { parts.append("No requirements") }
         return parts.joined(separator: " · ")
     }
@@ -191,6 +199,13 @@ let jobCatalog: [JobTemplate] = [
     JobTemplate(id: "doctor", title: "Doctor", baseSalary: 210_000, requiredEducation: .graduate, requiredField: .medicine, minSmarts: 70, nextTitle: "Chief of Medicine"),
     JobTemplate(id: "lawyer", title: "Lawyer", baseSalary: 140_000, requiredEducation: .graduate, requiredField: .law, minSmarts: 60, nextTitle: "Partner"),
     JobTemplate(id: "banker", title: "Investment Banker", baseSalary: 160_000, requiredEducation: .graduate, requiredField: .business, minSmarts: 60, nextTitle: "Managing Director"),
+    JobTemplate(id: "chef", title: "Line Cook", baseSalary: 30_000, nextTitle: "Head Chef"),
+    JobTemplate(id: "pilot", title: "Airline Pilot", baseSalary: 130_000, requiredEducation: .bachelor, minSmarts: 55, nextTitle: "Captain"),
+    JobTemplate(id: "scientist", title: "Research Scientist", baseSalary: 95_000, requiredMajor: "Biology", minSmarts: 65, nextTitle: "Lead Scientist"),
+    JobTemplate(id: "soldier", title: "Army Private", baseSalary: 32_000, minSmarts: 0, nextTitle: "Sergeant", military: true, maxAge: 35, minHealth: 50),
+    JobTemplate(id: "actor", title: "Actor", baseSalary: 25_000, minLooks: 50, nextTitle: "Movie Star", famous: true),
+    JobTemplate(id: "musician", title: "Musician", baseSalary: 20_000, nextTitle: "Rock Star", famous: true),
+    JobTemplate(id: "athlete", title: "Pro Athlete", baseSalary: 60_000, nextTitle: "All-Star", famous: true, maxAge: 32, minHealth: 80),
 ]
 
 let companyNames = [
@@ -289,7 +304,7 @@ func avatarEmoji(age: Int, gender: Gender) -> String {
 // MARK: - Assets
 
 enum AssetKind: String, Codable {
-    case house, car
+    case house, car, boat
 }
 
 struct Asset: Codable, Identifiable, Equatable {
@@ -299,8 +314,20 @@ struct Asset: Codable, Identifiable, Equatable {
     var purchasePrice: Int
     var value: Int
     var yearsOwned = 0
+    /// Outstanding mortgage / loan on this asset.
+    var loan = 0
 
-    var emoji: String { kind == .house ? "🏠" : "🚗" }
+    var emoji: String { kind.emoji }
+}
+
+extension AssetKind {
+    var emoji: String {
+        switch self {
+        case .house: return "🏠"
+        case .car: return "🚗"
+        case .boat: return "🛥️"
+        }
+    }
 }
 
 struct AssetListing: Identifiable, Hashable {
@@ -331,6 +358,12 @@ enum EventKind: Codable {
     case investmentPitch(amount: Int)
     case coworkerCredit
     case mugger
+    case siblingNeedsMoney(name: String, amount: Int)
+    case prom(Relationship)
+    case craving(Addiction)
+    case celebrity
+    case juryDuty
+    case drunkDriving
 }
 
 struct PendingEvent: Codable, Identifiable {
@@ -358,4 +391,6 @@ struct LifeSummary: Codable, Identifiable {
     let netWorth: Int
     let job: String?
     let children: Int
+    var ribbon: Ribbon? = nil
+    var generation: Int? = nil
 }

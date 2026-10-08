@@ -38,6 +38,18 @@ struct Life: Codable, Identifiable {
     var prisonYearsLeft = 0
     var criminalRecord: [String] = []
 
+    // Health, habits & status
+    var illnesses: [Illness] = []
+    var addictions: [Addiction] = []
+    var hasDriversLicense = false
+    var fame = 0
+    var followers = 0
+    var popularity = 50
+    var clubs: [String] = []
+    var datingPreference: Gender?
+    var generation = 1
+    var counters: [String: Int] = [:]
+
     // Timeline
     var log: [YearLog] = []
     var pendingEvents: [PendingEvent] = []
@@ -46,7 +58,12 @@ struct Life: Codable, Identifiable {
     var emoji: String { isAlive ? avatarEmoji(age: age, gender: gender) : "🪦" }
     var inPrison: Bool { prisonYearsLeft > 0 }
     var inGradeSchool: Bool { (5...17).contains(age) && !droppedOut }
-    var netWorth: Int { money + assets.reduce(0) { $0 + $1.value } - studentLoans }
+    var netWorth: Int { money + assets.reduce(0) { $0 + $1.value - $1.loan } - studentLoans }
+    var preferredGender: Gender { datingPreference ?? (gender == .male ? .female : .male) }
+    var children: [Relationship] { relationships.filter { $0.kind == .child } }
+
+    func count(_ key: Counter) -> Int { counters[key.rawValue] ?? 0 }
+    mutating func bump(_ key: Counter, by amount: Int = 1) { counters[key.rawValue, default: 0] += amount }
     var livingRelatives: [Relationship] { relationships.filter { $0.isAlive } }
     var romanticPartner: Relationship? { relationships.first { $0.isAlive && $0.kind.isRomantic } }
 
@@ -122,10 +139,13 @@ struct Life: Codable, Identifiable {
         age += 1
         log.append(YearLog(age: age, entries: []))
 
+        counters[Counter.gigsThisYear.rawValue] = 0
         ageStats()
+        progressHealth()
         progressSchool()
         progressPrison()
         progressCareer()
+        progressFame()
         progressFinances()
         progressAssets()
         progressRelationships()
@@ -145,6 +165,82 @@ struct Life: Codable, Identifiable {
         if age > 75 { smartsChange -= Int.random(in: 0...2) }
         adjust(happiness: .random(in: -4...3), health: healthChange, smarts: smartsChange, looks: looksChange)
         if stats.happiness < 15 { record("I've been feeling really down lately.") }
+    }
+
+    private mutating func progressHealth() {
+        for illness in illnesses {
+            adjust(happiness: -2, health: -illness.yearlyDamage)
+            if roll(0.25) && illness.curability >= 0.7 {
+                illnesses.removeAll { $0 == illness }
+                record("My \(illness.name.replacingOccurrences(of: "a ", with: "").lowercased()) went away on its own.")
+            }
+        }
+        let sickChance = age < 5 ? 0.08 : (age < 40 ? 0.1 : 0.12 + Double(age - 40) * 0.004)
+        if roll(sickChance) {
+            let illness = Illness.random(forAge: age)
+            if !illnesses.contains(illness) {
+                illnesses.append(illness)
+                record("🤒 I was diagnosed with \(illness.name).")
+                adjust(happiness: -5, health: -5)
+            }
+        }
+        if stats.happiness < 20 && age >= 13 && !illnesses.contains(.depression) && roll(0.3) {
+            illnesses.append(.depression)
+            record("😞 I was diagnosed with Depression.")
+        }
+        for addiction in addictions {
+            switch addiction {
+            case .alcohol:
+                adjust(health: -4, smarts: -1)
+                money -= 1_500
+            case .drugs:
+                adjust(happiness: -3, health: -7)
+                money -= 4_000
+            case .gambling:
+                let lost = Int.random(in: 500...8_000)
+                money -= lost
+                adjust(happiness: -4)
+                record("I lost \(formatMoney(lost)) feeding my gambling habit.")
+            case .smoking:
+                adjust(health: -3, looks: -1)
+                money -= 2_000
+            }
+        }
+    }
+
+    private mutating func progressFame() {
+        if let current = job, let template = jobCatalog.first(where: { $0.id == current.templateID }), age > template.maxAge {
+            job = nil
+            record("I hung up my boots as a \(current.title). I'm too old to keep going.")
+        }
+        if let current = job, let template = jobCatalog.first(where: { $0.id == current.templateID }), template.famous {
+            let gain = (current.performance - 40) / 6 + Int.random(in: -3...6)
+            fame = (fame + gain).clamped(to: 0...100)
+            let newSalary = template.baseSalary + fame * fame * 250
+            job?.salary = newSalary
+            if fame >= 50 && roll(0.2) {
+                record("⭐ Paparazzi followed me around all week. I'm famous!")
+            }
+        } else if fame > 0 {
+            fame = max(0, fame - Int.random(in: 1...4))
+        }
+        if followers > 0 {
+            followers = max(0, followers + Int(Double(followers) * Double.random(in: -0.1...0.05)))
+        }
+        if let current = job, jobCatalog.first(where: { $0.id == current.templateID })?.military == true, roll(0.25) {
+            if roll(0.06) {
+                die(cause: "wounds suffered in combat")
+                return
+            }
+            if roll(0.3) {
+                adjust(happiness: 10)
+                job?.performance = 100
+                record("🎖️ I was deployed overseas and awarded a medal for bravery.")
+            } else {
+                adjust(happiness: -10, health: -Int.random(in: 0...15))
+                record("🪖 I was deployed overseas for a tour of duty.")
+            }
+        }
     }
 
     private mutating func progressSchool() {
@@ -233,9 +329,16 @@ struct Life: Codable, Identifiable {
     }
 
     private mutating func progressFinances() {
-        for asset in assets {
-            let upkeep = asset.kind == .house ? asset.value / 100 : asset.value / 25
+        for index in assets.indices {
+            let asset = assets[index]
+            let upkeep = asset.kind == .house ? asset.value / 100 : asset.value / 20
             money -= upkeep
+            if asset.loan > 0 {
+                let payment = min(asset.loan, max(1_000, asset.purchasePrice / 15))
+                assets[index].loan -= payment
+                money -= payment
+                if assets[index].loan == 0 { record("I paid off the loan on my \(asset.name)!") }
+            }
         }
         if age >= 18 && enrollment == nil && !inPrison && job == nil && !isRetired && assets.isEmpty {
             // Basic living costs when not supported by anyone.
@@ -348,8 +451,79 @@ struct Life: Codable, Identifiable {
             causeOfDeath: causeOfDeath ?? "unknown",
             netWorth: netWorth,
             job: job?.title ?? (isRetired ? "Retired" : nil),
-            children: relationships.filter { $0.kind == .child }.count
+            children: children.count,
+            ribbon: ribbon,
+            generation: generation
         )
+    }
+
+    /// The ribbon this life earned, judged at death.
+    var ribbon: Ribbon {
+        if count(.murders) >= 3 { return .notorious }
+        if fame >= 80 { return .famous }
+        if netWorth >= 10_000_000 { return .rich }
+        if criminalRecord.count >= 5 || count(.crimes) >= 15 { return .criminal }
+        if count(.partners) >= 10 { return .casanova }
+        if children.count >= 4 { return .family }
+        if education == .graduate && stats.smarts >= 80 { return .scholar }
+        if age >= 100 { return .ancient }
+        if count(.parties) >= 20 { return .partyAnimal }
+        if count(.gym) >= 25 { return .athlete }
+        if karma >= 85 { return .saint }
+        if karma <= 15 { return .wicked }
+        if age < 18 { return .shortLived }
+        if netWorth < -10_000 { return .broke }
+        return .average
+    }
+
+    /// Living children you can continue playing as after death.
+    var heirs: [Relationship] { children.filter { $0.isAlive } }
+
+    /// Starts the next generation: play on as one of your children.
+    func continueAs(_ child: Relationship) -> Life {
+        var next = Life(
+            firstName: child.firstName,
+            lastName: child.lastName,
+            gender: child.gender,
+            city: city,
+            country: country,
+            stats: .random()
+        )
+        next.age = child.age
+        next.generation = generation + 1
+        next.stats.looks = child.looks
+        if child.age >= 18 { next.education = .highSchool }
+        if child.age >= 5 && child.age <= 17 { next.schoolGrades = .random(in: 40...90) }
+
+        let inheritance = max(0, netWorth) / max(1, heirs.count)
+        next.money = inheritance
+
+        var deceased = Relationship(
+            kind: gender == .male ? .father : .mother,
+            firstName: firstName, lastName: lastName, gender: gender,
+            age: age, bond: child.bond
+        )
+        deceased.isAlive = false
+        next.relationships = [deceased]
+        if let partner = relationships.first(where: { $0.kind == .spouse && $0.isAlive }) {
+            var parent = partner
+            parent.id = UUID()
+            parent.kind = partner.gender == .male ? .father : .mother
+            parent.bond = .random(in: 50...95)
+            next.relationships.append(parent)
+        }
+        for sibling in heirs where sibling.id != child.id {
+            var brother = sibling
+            brother.id = UUID()
+            brother.kind = .sibling
+            brother.bond = .random(in: 30...90)
+            next.relationships.append(brother)
+        }
+
+        var intro = "I am \(child.fullName), generation \(next.generation). My \(gender == .male ? "father" : "mother") \(fullName) died at \(age)."
+        if inheritance > 0 { intro += " I inherited \(formatMoney(inheritance))." }
+        next.log = [YearLog(age: child.age, entries: [intro])]
+        return next
     }
 }
 
