@@ -149,7 +149,6 @@ struct JobTemplate: Identifiable, Hashable {
     var minSmarts: Int = 0
     var minLooks: Int = 0
     var partTime: Bool = false
-    var nextTitle: String? = nil
     /// Salary grows with fame (actors, musicians, athletes).
     var famous: Bool = false
     var military: Bool = false
@@ -186,26 +185,26 @@ let jobCatalog: [JobTemplate] = [
     JobTemplate(id: "construction", title: "Construction Worker", baseSalary: 38_000),
     JobTemplate(id: "trucker", title: "Truck Driver", baseSalary: 48_000),
     JobTemplate(id: "receptionist", title: "Receptionist", baseSalary: 32_000, requiredEducation: .highSchool),
-    JobTemplate(id: "police", title: "Police Officer", baseSalary: 55_000, requiredEducation: .highSchool, minSmarts: 30, nextTitle: "Detective"),
-    JobTemplate(id: "firefighter", title: "Firefighter", baseSalary: 52_000, requiredEducation: .highSchool, nextTitle: "Fire Captain"),
-    JobTemplate(id: "model", title: "Fashion Model", baseSalary: 60_000, minLooks: 80, nextTitle: "Supermodel"),
-    JobTemplate(id: "teacher", title: "Teacher", baseSalary: 50_000, requiredMajor: "Education", nextTitle: "Principal"),
-    JobTemplate(id: "nurse", title: "Nurse", baseSalary: 72_000, requiredMajor: "Nursing", nextTitle: "Head Nurse"),
-    JobTemplate(id: "engineer", title: "Mechanical Engineer", baseSalary: 85_000, requiredMajor: "Engineering", minSmarts: 50, nextTitle: "Senior Engineer"),
-    JobTemplate(id: "software", title: "Software Engineer", baseSalary: 110_000, requiredMajor: "Computer Science", minSmarts: 55, nextTitle: "Staff Engineer"),
-    JobTemplate(id: "accountant", title: "Accountant", baseSalary: 65_000, requiredEducation: .bachelor, minSmarts: 40, nextTitle: "Senior Accountant"),
-    JobTemplate(id: "marketing", title: "Marketing Associate", baseSalary: 58_000, requiredEducation: .bachelor, nextTitle: "Marketing Director"),
+    JobTemplate(id: "police", title: "Police Officer", baseSalary: 55_000, requiredEducation: .highSchool, minSmarts: 30),
+    JobTemplate(id: "firefighter", title: "Firefighter", baseSalary: 52_000, requiredEducation: .highSchool),
+    JobTemplate(id: "model", title: "Fashion Model", baseSalary: 60_000, minLooks: 80),
+    JobTemplate(id: "teacher", title: "Teacher", baseSalary: 50_000, requiredMajor: "Education"),
+    JobTemplate(id: "nurse", title: "Nurse", baseSalary: 72_000, requiredMajor: "Nursing"),
+    JobTemplate(id: "engineer", title: "Mechanical Engineer", baseSalary: 85_000, requiredMajor: "Engineering", minSmarts: 50),
+    JobTemplate(id: "software", title: "Software Engineer", baseSalary: 110_000, requiredMajor: "Computer Science", minSmarts: 55),
+    JobTemplate(id: "accountant", title: "Accountant", baseSalary: 65_000, requiredEducation: .bachelor, minSmarts: 40),
+    JobTemplate(id: "marketing", title: "Marketing Associate", baseSalary: 58_000, requiredEducation: .bachelor),
     JobTemplate(id: "psych", title: "Psychologist", baseSalary: 82_000, requiredMajor: "Psychology", minSmarts: 50),
-    JobTemplate(id: "doctor", title: "Doctor", baseSalary: 210_000, requiredEducation: .graduate, requiredField: .medicine, minSmarts: 70, nextTitle: "Chief of Medicine"),
-    JobTemplate(id: "lawyer", title: "Lawyer", baseSalary: 140_000, requiredEducation: .graduate, requiredField: .law, minSmarts: 60, nextTitle: "Partner"),
-    JobTemplate(id: "banker", title: "Investment Banker", baseSalary: 160_000, requiredEducation: .graduate, requiredField: .business, minSmarts: 60, nextTitle: "Managing Director"),
-    JobTemplate(id: "chef", title: "Line Cook", baseSalary: 30_000, nextTitle: "Head Chef"),
-    JobTemplate(id: "pilot", title: "Airline Pilot", baseSalary: 130_000, requiredEducation: .bachelor, minSmarts: 55, nextTitle: "Captain"),
-    JobTemplate(id: "scientist", title: "Research Scientist", baseSalary: 95_000, requiredMajor: "Biology", minSmarts: 65, nextTitle: "Lead Scientist"),
-    JobTemplate(id: "soldier", title: "Army Private", baseSalary: 32_000, minSmarts: 0, nextTitle: "Sergeant", military: true, maxAge: 35, minHealth: 50),
-    JobTemplate(id: "actor", title: "Actor", baseSalary: 25_000, minLooks: 50, nextTitle: "Movie Star", famous: true),
-    JobTemplate(id: "musician", title: "Musician", baseSalary: 20_000, nextTitle: "Rock Star", famous: true),
-    JobTemplate(id: "athlete", title: "Pro Athlete", baseSalary: 60_000, nextTitle: "All-Star", famous: true, maxAge: 32, minHealth: 80),
+    JobTemplate(id: "doctor", title: "Doctor", baseSalary: 210_000, requiredEducation: .graduate, requiredField: .medicine, minSmarts: 70),
+    JobTemplate(id: "lawyer", title: "Lawyer", baseSalary: 140_000, requiredEducation: .graduate, requiredField: .law, minSmarts: 60),
+    JobTemplate(id: "banker", title: "Investment Banker", baseSalary: 160_000, requiredEducation: .graduate, requiredField: .business, minSmarts: 60),
+    JobTemplate(id: "chef", title: "Line Cook", baseSalary: 30_000),
+    JobTemplate(id: "pilot", title: "Airline Pilot", baseSalary: 130_000, requiredEducation: .bachelor, minSmarts: 55),
+    JobTemplate(id: "scientist", title: "Research Scientist", baseSalary: 95_000, requiredMajor: "Biology", minSmarts: 65),
+    JobTemplate(id: "soldier", title: "Army Private", baseSalary: 32_000, minSmarts: 0, military: true, maxAge: 35, minHealth: 50),
+    JobTemplate(id: "actor", title: "Actor", baseSalary: 25_000, minLooks: 50, famous: true),
+    JobTemplate(id: "musician", title: "Musician", baseSalary: 20_000, famous: true),
+    JobTemplate(id: "athlete", title: "Pro Athlete", baseSalary: 60_000, famous: true, maxAge: 32, minHealth: 80),
 ]
 
 let companyNames = [
@@ -226,10 +225,39 @@ struct Job: Codable, Equatable {
     var title: String
     var company: String
     var salary: Int
-    var years: Int = 0
-    var performance: Int = 50
+    /// The salary offered at the entry level; later levels scale from this.
+    var baseSalary: Int
+    var years = 0
+    var performance = 50
     var partTime: Bool
-    var promoted: Bool = false
+    var level = 0
+    var yearsInLevel = 0
+    /// Job actions already used this year.
+    var usedActions: [String] = []
+
+    init(templateID: String, title: String, company: String, salary: Int, partTime: Bool) {
+        self.templateID = templateID
+        self.title = title
+        self.company = company
+        self.salary = salary
+        self.baseSalary = salary
+        self.partTime = partTime
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        templateID = try c.decode(String.self, forKey: .templateID)
+        title = try c.decode(String.self, forKey: .title)
+        company = try c.decode(String.self, forKey: .company)
+        salary = try c.decode(Int.self, forKey: .salary)
+        baseSalary = try c.decodeIfPresent(Int.self, forKey: .baseSalary) ?? salary
+        years = try c.decodeIfPresent(Int.self, forKey: .years) ?? 0
+        performance = try c.decodeIfPresent(Int.self, forKey: .performance) ?? 50
+        partTime = try c.decodeIfPresent(Bool.self, forKey: .partTime) ?? false
+        level = try c.decodeIfPresent(Int.self, forKey: .level) ?? 0
+        yearsInLevel = try c.decodeIfPresent(Int.self, forKey: .yearsInLevel) ?? 0
+        usedActions = try c.decodeIfPresent([String].self, forKey: .usedActions) ?? []
+    }
 }
 
 // MARK: - Relationships

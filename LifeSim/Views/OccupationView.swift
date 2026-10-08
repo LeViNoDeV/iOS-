@@ -116,15 +116,42 @@ struct OccupationView: View {
                 LabeledContent("Title", value: job.title)
                 LabeledContent("Company", value: job.company)
                 LabeledContent("Salary", value: "\(formatMoney(job.salary))/yr")
-                LabeledContent("Years", value: "\(job.years)")
+                LabeledContent("Years", value: "\(job.years) (\(job.yearsInLevel) in this role)")
                 if life.fame > 0 {
                     StatBar(label: "Fame", emoji: "⭐", value: life.fame)
                 }
-                VStack(alignment: .leading) {
-                    StatBar(label: "Performance", emoji: "📊", value: job.performance)
+                StatBar(label: "Performance", emoji: "📊", value: job.performance)
+            }
+
+            if let template = life.jobTemplate, template.ladder.count > 1 {
+                Section("Career Ladder") {
+                    ForEach(Array(template.ladder.enumerated()), id: \.offset) { index, rung in
+                        HStack {
+                            Text(index < job.level ? "✅" : (index == job.level ? "📍" : "🔒"))
+                            Text(rung)
+                                .fontWeight(index == job.level ? .bold : .regular)
+                                .foregroundStyle(index > job.level ? Color.secondary : Color.primary)
+                            Spacer()
+                            Text(formatMoney(template.salary(atLevel: index, base: job.baseSalary)))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
-                Button { store.run { $0.workHarder() } } label: {
-                    ActionRow(emoji: "💼", title: "Work Harder")
+            }
+
+            Section {
+                ForEach(life.availableJobActions) { action in
+                    let used = life.hasUsed(action)
+                    Button { store.run { $0.perform(action) } } label: {
+                        ActionRow(emoji: action.emoji, title: action.title, subtitle: used ? "Done this year" : nil, enabled: !used)
+                    }
+                    .disabled(used)
+                }
+                if let template = life.jobTemplate, job.level < template.ladder.count - 1 {
+                    Button { store.run { $0.askForPromotion() } } label: {
+                        ActionRow(emoji: "🪜", title: "Ask for a Promotion", subtitle: "Next: \(template.ladder[job.level + 1])")
+                    }
                 }
                 Button { store.run { $0.askForRaise() } } label: {
                     ActionRow(emoji: "💵", title: "Ask for a Raise")
@@ -137,6 +164,10 @@ struct OccupationView: View {
                 Button(role: .destructive) { store.run { $0.quitJob() } } label: {
                     ActionRow(emoji: "🚪", title: "Quit Job")
                 }
+            } header: {
+                Text("At Work")
+            } footer: {
+                Text("Each work action can be done once per year. Risky actions can get you fired, hurt or even arrested.")
             }
         } else if life.isRetired {
             Section("Retirement") {
@@ -179,11 +210,16 @@ struct OccupationView: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(opening.template.title + (opening.template.partTime ? " (Part-time)" : "") + (opening.template.famous ? " ⭐" : "") + (opening.template.military ? " 🪖" : ""))
+                            Text(opening.template.entryTitle + (opening.template.partTime ? " (Part-time)" : "") + (opening.template.famous ? " ⭐" : "") + (opening.template.military ? " 🪖" : ""))
                                 .font(.body.weight(.medium))
                             Text(opening.company)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if opening.template.ladder.count > 1 {
+                                Text("Career path up to \(opening.template.topTitle)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text(opening.template.requirementText)
                                 .font(.caption2)
                                 .foregroundStyle(qualified ? Color.secondary : Color.red)

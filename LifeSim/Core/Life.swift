@@ -209,15 +209,14 @@ struct Life: Codable, Identifiable {
     }
 
     private mutating func progressFame() {
-        if let current = job, let template = jobCatalog.first(where: { $0.id == current.templateID }), age > template.maxAge {
+        if let current = job, let template = jobTemplate, !template.military, age > template.maxAge {
             job = nil
             record("I hung up my boots as a \(current.title). I'm too old to keep going.")
         }
         if let current = job, let template = jobCatalog.first(where: { $0.id == current.templateID }), template.famous {
             let gain = (current.performance - 40) / 6 + Int.random(in: -3...6)
             fame = (fame + gain).clamped(to: 0...100)
-            let newSalary = template.baseSalary + fame * fame * 250
-            job?.salary = newSalary
+            job?.salary = template.salary(atLevel: current.level, base: current.baseSalary) + fame * fame * 250
             if fame >= 50 && roll(0.2) {
                 record("⭐ Paparazzi followed me around all week. I'm famous!")
             }
@@ -296,6 +295,8 @@ struct Life: Codable, Identifiable {
         }
         guard var current = job else { return }
         current.years += 1
+        current.yearsInLevel += 1
+        current.usedActions = []
         current.performance = (current.performance + .random(in: -10...8) + (stats.smarts - 50) / 15).clamped(to: 0...100)
         let net = Int(Double(current.salary) * 0.75)
         money += net
@@ -312,18 +313,17 @@ struct Life: Codable, Identifiable {
             adjust(happiness: -15)
             return
         }
-        if current.performance > 70 && current.years >= 2 && roll(0.35) {
-            let raise = Int(Double(current.salary) * Double.random(in: 0.08...0.2))
+        let ladderTop = (jobTemplate?.ladder.count ?? 1) - 1
+        if current.performance > 75 && current.yearsInLevel >= 2 && current.level < ladderTop && roll(0.3) {
+            job = current
+            promote()
+            return
+        }
+        if current.performance > 70 && current.years >= 2 && roll(0.25) {
+            let raise = Int(Double(current.salary) * Double.random(in: 0.04...0.1))
             current.salary += raise
-            if !current.promoted, let next = jobCatalog.first(where: { $0.id == current.templateID })?.nextTitle, roll(0.5) {
-                current.title = next
-                current.promoted = true
-                current.salary += raise
-                record("📈 I was promoted to \(next)! My salary is now \(formatMoney(current.salary)).")
-            } else {
-                record("📈 I got a raise! My salary is now \(formatMoney(current.salary)).")
-            }
-            adjust(happiness: 8)
+            record("💵 I got a raise! My salary is now \(formatMoney(current.salary)).")
+            adjust(happiness: 6)
         }
         job = current
     }

@@ -509,31 +509,26 @@ extension Life {
         if template.famous { chance = 0.15 + Double(stats.looks + stats.smarts) / 400 + Double(fame) / 200 }
         if template.military { chance = 0.85 }
         guard roll(chance.clamped(to: 0.05...0.95)) else {
-            let message = "I interviewed for the \(template.title) position at \(company), but they didn't hire me."
+            let message = "I interviewed for the \(template.entryTitle) position at \(company), but they didn't hire me."
             record(message)
             adjust(happiness: -3)
             return Outcome(title: "Rejected", message: message)
         }
         if let current = job { record("I quit my job as a \(current.title).") }
-        job = Job(templateID: template.id, title: template.title, company: company, salary: salary, partTime: template.partTime)
+        job = Job(templateID: template.id, title: template.entryTitle, company: company, salary: salary, partTime: template.partTime)
         isRetired = false
-        let message = "🎉 I got hired as a \(template.title) at \(company) for \(formatMoney(salary))/yr!"
+        let message = "🎉 I got hired as a \(template.entryTitle) at \(company) for \(formatMoney(salary))/yr!"
         record(message)
         adjust(happiness: 10)
         return Outcome(title: "Hired!", message: message)
     }
 
-    mutating func workHarder() -> Outcome {
-        let performance = job?.performance ?? 50
-        job?.performance = min(100, performance + .random(in: 4...10))
-        adjust(happiness: -2, health: -1)
-        let message = "I worked extra hard at my job."
-        record(message)
-        return Outcome(title: "Work", message: message)
-    }
-
     mutating func askForRaise() -> Outcome {
         guard var current = job else { return Outcome(title: "Raise", message: "I don't have a job.") }
+        guard !current.usedActions.contains("raise") else {
+            return Outcome(title: "Raise", message: "I already asked for a raise this year.")
+        }
+        current.usedActions.append("raise")
         let message: String
         if roll(Double(current.performance) / 130) {
             let raise = Int(Double(current.salary) * Double.random(in: 0.05...0.12))
