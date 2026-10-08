@@ -13,6 +13,12 @@ struct AssetsView: View {
                     if life.studentLoans > 0 {
                         LabeledContent("Student Loans", value: formatMoney(life.studentLoans))
                     }
+                    if life.spouseContribution > 0 {
+                        LabeledContent("Spouse Contributes", value: "+\(formatMoney(life.spouseContribution))/yr")
+                    }
+                    if life.childExpenses > 0 {
+                        LabeledContent("Child Expenses", value: "-\(formatMoney(life.childExpenses))/yr")
+                    }
                 }
 
                 Section("My Stuff") {

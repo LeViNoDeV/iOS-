@@ -149,6 +149,7 @@ struct Life: Codable, Identifiable {
         progressFinances()
         progressAssets()
         progressRelationships()
+        progressSocial()
         if !inPrison { RandomEvents.generate(for: &self) }
         checkForDeath()
     }
@@ -346,7 +347,7 @@ struct Life: Codable, Identifiable {
         }
         if age >= 18 && enrollment == nil && !inPrison && job == nil && !isRetired && assets.isEmpty {
             // Basic living costs when not supported by anyone.
-            if relationships.contains(where: { $0.kind.isParent && $0.isAlive }) && age < 25 {
+            if livesWithParents {
                 // Still living with mom and dad.
             } else {
                 money -= 6_000
@@ -373,22 +374,47 @@ struct Life: Codable, Identifiable {
     private mutating func progressRelationships() {
         for index in relationships.indices where relationships[index].isAlive {
             relationships[index].age += 1
+            if relationships[index].lastContact == nil { relationships[index].lastContact = age - 1 }
             let person = relationships[index]
-            var drift = Int.random(in: -4...1)
-            if person.kind == .pet { drift = Int.random(in: -1...2) }
+            var drift = Int.random(in: -2...1)
+            if person.kind == .pet || (person.kind == .child && person.age < 6) || ((person.kind.isParent || person.kind == .sibling) && age < 12) {
+                drift = Int.random(in: -1...2)
+            } else if (person.yearsSinceContact(playerAge: age) ?? 99) >= 2 {
+                drift -= Int.random(in: 1...4) // Neglected relationships fade.
+            }
+            if person.trait == .toxic { drift -= 2 }
             relationships[index].bond = (person.bond + drift).clamped(to: 0...100)
+            if relationships[index].age == 18 && relationships[index].occupation == nil && person.kind != .child {
+                relationships[index].assignOccupation()
+            }
+            if relationships[index].age == 67 && relationships[index].salary > 0 {
+                relationships[index].occupation = "Retired"
+                relationships[index].salary = 0
+            }
 
             if dies(age: person.age, isPet: person.kind == .pet) {
                 relationships[index].isAlive = false
                 let verb = person.kind == .pet ? "passed away" : "died"
                 record("🕊️ My \(person.title.lowercased()) \(person.firstName) \(verb) at age \(person.age).")
                 adjust(happiness: -(person.bond / 4 + 5))
-                if person.kind.isParent && person.money > 0 && roll(0.7) {
-                    let share = person.money / max(1, relationships.filter { $0.kind == .sibling }.count + 1)
-                    money += share
-                    record("I inherited \(formatMoney(share)) from \(person.firstName).")
+                if person.kind.isParent && person.money > 0 {
+                    let fullShare = person.money / max(1, relationships.filter { $0.kind == .sibling && $0.isAlive }.count + 1)
+                    let share = Int(Double(fullShare) * inheritanceShare(from: person))
+                    if share == 0 {
+                        record("📜 \(person.firstName) cut me out of the will. We were never close.")
+                    } else {
+                        money += share
+                        record("📜 I inherited \(formatMoney(share)) from \(person.firstName)\(share < fullShare ? ". It would have been more if we'd been closer." : ".")")
+                    }
                 }
                 continue
+            }
+
+            if person.kind == .friend && relationships[index].bond <= 5 {
+                relationships.remove(at: index)
+                record("👋 \(person.firstName) and I drifted apart. We're not friends anymore.")
+                adjust(happiness: -3)
+                return // indices changed; stop iterating this year
             }
 
             if person.kind.isRomantic && person.bond < 15 && roll(0.4) {
@@ -405,9 +431,6 @@ struct Life: Codable, Identifiable {
                 return // indices changed; stop iterating this year
             }
 
-            if person.kind == .child && person.age == 18 {
-                record("My \(person.title.lowercased()) \(person.firstName) turned 18 and moved out.")
-            }
         }
     }
 

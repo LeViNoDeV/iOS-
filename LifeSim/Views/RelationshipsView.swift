@@ -9,6 +9,12 @@ struct RelationshipsView: View {
     var body: some View {
         if let life = store.life {
             List {
+                Section {
+                    StatBar(label: "Support", emoji: "🫂", value: life.socialSupport)
+                } footer: {
+                    Text(supportFooter(life))
+                }
+
                 if !life.inPrison {
                     Section {
                         if life.canFindDate {
@@ -64,6 +70,12 @@ struct RelationshipsView: View {
         }
     }
 
+    private func supportFooter(_ life: Life) -> String {
+        if life.isLonely { return "You're lonely. Make friends or find a partner — loneliness drags your happiness down every year." }
+        if life.socialSupport >= 70 { return "The people in your life have your back. Strong relationships boost your happiness every year." }
+        return "Spend time with people to keep bonds strong. Relationships you ignore for 2+ years fade."
+    }
+
     @ViewBuilder
     private func group(_ title: String, _ people: [Relationship]) -> some View {
         if !people.isEmpty {
@@ -72,7 +84,7 @@ struct RelationshipsView: View {
                     NavigationLink {
                         RelationshipDetailView(personID: person.id)
                     } label: {
-                        PersonRow(person: person)
+                        PersonRow(person: person, neglected: (person.yearsSinceContact(playerAge: store.life?.age ?? 0) ?? 0) >= 2)
                     }
                 }
             }
@@ -82,6 +94,7 @@ struct RelationshipsView: View {
 
 struct PersonRow: View {
     let person: Relationship
+    var neglected = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -91,7 +104,7 @@ struct PersonRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(person.fullName)
                     .font(.body.weight(.medium))
-                Text(person.isAlive ? "\(person.title) · Age \(person.age)" : "\(person.title) · Deceased")
+                Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if person.isAlive {
@@ -102,6 +115,15 @@ struct PersonRow: View {
         }
         .padding(.vertical, 2)
         .opacity(person.isAlive ? 1 : 0.5)
+    }
+
+    private var subtitle: String {
+        guard person.isAlive else { return "\(person.title) · Deceased" }
+        var parts = ["\(person.title) · Age \(person.age)"]
+        if let status = person.status { parts.append(status) }
+        if let trait = person.trait { parts.append(trait.emoji) }
+        if neglected { parts.append("💤 Neglected") }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -124,6 +146,30 @@ struct RelationshipDetailView: View {
                         StatBar(label: "Relationship", emoji: "💞", value: person.bond)
                         if person.species == nil {
                             StatBar(label: "Looks", emoji: "✨", value: person.looks)
+                        }
+                    }
+                }
+
+                if person.isAlive && !person.isPet {
+                    Section("About \(person.firstName)") {
+                        if let status = person.status {
+                            LabeledContent("Status", value: status)
+                        }
+                        if let trait = person.trait {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(trait.emoji) \(trait.name)").font(.body.weight(.medium))
+                                Text(trait.blurb).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        if let occupation = person.occupation {
+                            LabeledContent("Occupation", value: person.salary > 0 ? "\(occupation) · \(formatMoney(person.salary))/yr" : occupation)
+                        }
+                        if person.kind.isRomantic && person.yearsTogether > 0 {
+                            LabeledContent("Together", value: "\(person.yearsTogether) year\(person.yearsTogether == 1 ? "" : "s")")
+                        }
+                        if let years = person.yearsSinceContact(playerAge: life.age) {
+                            LabeledContent("Last talked", value: years <= 0 ? "This year" : "\(years) year\(years == 1 ? "" : "s") ago")
+                                .foregroundStyle(years >= 2 ? Color.orange : Color.primary)
                         }
                     }
                 }

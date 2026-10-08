@@ -300,6 +300,12 @@ struct Relationship: Codable, Identifiable, Equatable {
     var money: Int = 0
     var species: String? = nil
     var isAlive = true
+    var trait: Trait? = nil
+    var occupation: String? = nil
+    var salary = 0
+    /// Your age when you last interacted with them.
+    var lastContact: Int? = nil
+    var yearsTogether = 0
 
     var fullName: String { species == nil ? "\(firstName) \(lastName)" : firstName }
 
@@ -319,6 +325,29 @@ struct Relationship: Codable, Identifiable, Equatable {
         if let species = species { return petEmoji[species] ?? "🐾" }
         if !isAlive { return "🪦" }
         return avatarEmoji(age: age, gender: gender)
+    }
+}
+
+extension Relationship {
+    /// Decodes saves made before traits, jobs and contact tracking existed.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        kind = try c.decode(RelationKind.self, forKey: .kind)
+        firstName = try c.decode(String.self, forKey: .firstName)
+        lastName = try c.decode(String.self, forKey: .lastName)
+        gender = try c.decode(Gender.self, forKey: .gender)
+        age = try c.decode(Int.self, forKey: .age)
+        bond = try c.decode(Int.self, forKey: .bond)
+        looks = try c.decodeIfPresent(Int.self, forKey: .looks) ?? 50
+        money = try c.decodeIfPresent(Int.self, forKey: .money) ?? 0
+        species = try c.decodeIfPresent(String.self, forKey: .species)
+        isAlive = try c.decodeIfPresent(Bool.self, forKey: .isAlive) ?? true
+        trait = try c.decodeIfPresent(Trait.self, forKey: .trait)
+        occupation = try c.decodeIfPresent(String.self, forKey: .occupation)
+        salary = try c.decodeIfPresent(Int.self, forKey: .salary) ?? 0
+        lastContact = try c.decodeIfPresent(Int.self, forKey: .lastContact)
+        yearsTogether = try c.decodeIfPresent(Int.self, forKey: .yearsTogether) ?? 0
     }
 }
 
@@ -397,6 +426,12 @@ enum EventKind: Codable {
     case celebrity
     case juryDuty
     case drunkDriving
+    case parentNeedsCare(UUID)
+    case partnerProposes(UUID)
+    case partnerCheated(UUID)
+    case childInTrouble(UUID)
+    case friendNeedsHelp(UUID, amount: Int)
+    case familyReunion
 }
 
 struct PendingEvent: Codable, Identifiable {

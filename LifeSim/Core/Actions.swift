@@ -440,7 +440,7 @@ extension Life {
     }
 
     mutating func enrollUniversity(major: String) -> Outcome {
-        let parentsPay = relationships.contains { $0.kind.isParent && $0.isAlive && $0.money > universityTuitionPerYear * 4 } && roll(0.6)
+        let parentsPay = relationships.contains { $0.kind.isParent && $0.isAlive && $0.bond >= 50 && $0.money > universityTuitionPerYear * 4 } && roll(0.75)
         if !parentsPay { studentLoans += universityTuitionPerYear * 4 }
         enrollment = Enrollment(kind: .university(major: major), yearsLeft: 4, grades: schoolGrades)
         if let current = job, !current.partTime { job = nil }
@@ -508,6 +508,11 @@ extension Life {
         if !criminalRecord.isEmpty && !template.partTime && !template.famous { chance -= 0.2 }
         if template.famous { chance = 0.15 + Double(stats.looks + stats.smarts) / 400 + Double(fame) / 200 }
         if template.military { chance = 0.85 }
+        var referral = ""
+        if let friend = bestFriend, friend.salary > 0, !template.partTime {
+            chance += 0.15
+            referral = " My best friend \(friend.firstName) put in a good word for me."
+        }
         guard roll(chance.clamped(to: 0.05...0.95)) else {
             let message = "I interviewed for the \(template.entryTitle) position at \(company), but they didn't hire me."
             record(message)
@@ -517,7 +522,7 @@ extension Life {
         if let current = job { record("I quit my job as a \(current.title).") }
         job = Job(templateID: template.id, title: template.entryTitle, company: company, salary: salary, partTime: template.partTime)
         isRetired = false
-        let message = "🎉 I got hired as a \(template.entryTitle) at \(company) for \(formatMoney(salary))/yr!"
+        let message = "🎉 I got hired as a \(template.entryTitle) at \(company) for \(formatMoney(salary))/yr!\(referral)"
         record(message)
         adjust(happiness: 10)
         return Outcome(title: "Hired!", message: message)
@@ -599,6 +604,7 @@ extension Life {
         }
         let name = person.firstName
         var message: String
+        touch(id)
 
         switch action {
         case .spendTime:
@@ -606,7 +612,11 @@ extension Life {
             adjust(happiness: 4)
             message = "I spent quality time with my \(person.title.lowercased()) \(name)."
         case .conversation:
-            if roll(0.85) {
+            if person.trait == .funny {
+                updateRelationship(id) { $0.bond += .random(in: 3...7) }
+                adjust(happiness: 5)
+                message = "😂 \(name) had me laughing so hard my sides hurt."
+            } else if roll(0.85) {
                 updateRelationship(id) { $0.bond += .random(in: 2...6) }
                 message = "I had a nice conversation with \(name)."
             } else {
@@ -621,7 +631,9 @@ extension Life {
             updateRelationship(id) { $0.bond += .random(in: 5...12) }
             message = "I gave \(name) a thoughtful gift. \(person.gender.subject.capitalized) loved it!"
         case .askForMoney:
-            let chance = Double(person.bond) / 140
+            var chance = Double(person.bond) / 140
+            if person.trait == .generous { chance += 0.3 }
+            if person.trait == .lazy || person.trait == .toxic { chance -= 0.2 }
             if person.money > 100 && roll(chance) {
                 let amount = min(person.money, Int.random(in: 10...max(11, person.money / 20)))
                 money += amount
@@ -756,10 +768,15 @@ extension Life {
     }
 
     mutating func makeFriend() -> Outcome {
-        let friend = Names.person(kind: .friend, age: max(5, age + .random(in: -3...3)), bond: .random(in: 40...70))
+        var friend = Names.person(kind: .friend, age: max(5, age + .random(in: -3...3)), bond: .random(in: 40...70))
+        friend.lastContact = age
         relationships.append(friend)
         adjust(happiness: 4)
-        let message = "I made a new friend named \(friend.fullName)."
+        var message = "I made a new friend named \(friend.fullName)."
+        if let partner = romanticPartner, partner.trait == .jealous {
+            updateRelationship(partner.id) { $0.bond -= 8 }
+            message += " \(partner.firstName) got jealous of how much time I spend with them."
+        }
         record(message)
         return Outcome(title: "New Friend", message: message)
     }

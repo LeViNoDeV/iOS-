@@ -4,7 +4,9 @@ enum RandomEvents {
     /// Adds 0–2 things that "just happen" this year, plus maybe a choice event.
     static func generate(for life: inout Life) {
         passiveEvent(&life)
-        if roll(0.55), let event = choiceEvent(for: life) {
+        if roll(0.35), let event = socialEvent(for: life) {
+            life.pendingEvents.append(event)
+        } else if roll(0.5), let event = choiceEvent(for: life) {
             life.pendingEvents.append(event)
         }
     }
@@ -52,6 +54,64 @@ enum RandomEvents {
         if let event = options.randomElement() {
             event(&life)
         }
+    }
+
+    // MARK: Events driven by the people in your life
+
+    private static func socialEvent(for life: Life) -> PendingEvent? {
+        var events: [PendingEvent] = []
+        let alive = life.relationships.filter { $0.isAlive && !$0.isPet }
+
+        for parent in alive where parent.kind.isParent && parent.age >= 68 && life.age >= 18 {
+            events.append(PendingEvent(
+                kind: .parentNeedsCare(parent.id),
+                title: "Family Health Scare",
+                message: "Your \(parent.title.lowercased()) \(parent.firstName) (\(parent.age)) is in poor health and needs help.",
+                options: ["Move in and care for them", "Send money ($2,000)", "Ignore it"]
+            ))
+        }
+        if let partner = alive.first(where: { $0.kind == .partner }), partner.bond >= 75, partner.yearsTogether >= 2, life.age >= 18 {
+            events.append(PendingEvent(
+                kind: .partnerProposes(partner.id),
+                title: "Will You Marry Me?",
+                message: "\(partner.firstName) got down on one knee and proposed to you! 💍",
+                options: ["Yes!", "No"]
+            ))
+        }
+        if let partner = alive.first(where: { $0.kind.isRomantic }), partner.bond < 45 || (partner.trait == .toxic && roll(0.5)) {
+            events.append(PendingEvent(
+                kind: .partnerCheated(partner.id),
+                title: "Betrayal",
+                message: "You found messages on \(partner.firstName)'s phone. They've been cheating on you.",
+                options: ["Forgive them", "Confront them", "End it"]
+            ))
+        }
+        for kid in alive where kid.kind == .child && (13...19).contains(kid.age) && kid.bond < 45 {
+            events.append(PendingEvent(
+                kind: .childInTrouble(kid.id),
+                title: "Trouble at Home",
+                message: "Your \(kid.title.lowercased()) \(kid.firstName) (\(kid.age)) was caught \(["shoplifting", "skipping school for a month", "vandalizing the school", "drinking at a party"].randomElement()!).",
+                options: ["Have a heart-to-heart", "Ground them", "Let it slide"]
+            ))
+        }
+        for friend in alive where friend.kind == .friend && friend.bond >= 40 && life.age >= 16 {
+            let amount = Int.random(in: 200...5_000)
+            events.append(PendingEvent(
+                kind: .friendNeedsHelp(friend.id, amount: amount),
+                title: "A Friend in Need",
+                message: "\(friend.firstName) is going through a rough patch and asks to borrow \(formatMoney(amount)).",
+                options: ["Help them out", "Say no"]
+            ))
+        }
+        if alive.filter({ $0.kind.isParent || $0.kind == .sibling || $0.kind == .child }).count >= 2 && life.age >= 10 {
+            events.append(PendingEvent(
+                kind: .familyReunion,
+                title: "Family Reunion",
+                message: "The whole family is getting together for the holidays.",
+                options: ["Go and have fun", "Go and start drama", "Skip it"]
+            ))
+        }
+        return events.randomElement()
     }
 
     // MARK: Choice events
@@ -434,6 +494,125 @@ extension Life {
             }
             money -= 40
             return "I took a cab home. Better safe than sorry."
+
+        case .parentNeedsCare(let id):
+            guard let parent = relationships.first(where: { $0.id == id }) else { return "It turned out to be nothing." }
+            touch(id)
+            switch choice {
+            case 0:
+                updateRelationship(id) { $0.bond += 25 }
+                karma += 5
+                adjust(happiness: -4, health: -3)
+                if let current = job, !current.partTime { job?.performance = max(0, current.performance - 10) }
+                return "I moved in to care for \(parent.firstName). It was exhausting, but \(parent.gender.subject) was so grateful."
+            case 1:
+                money -= 2_000
+                updateRelationship(id) { $0.bond += 8 }
+                return "I sent \(parent.firstName) $2,000 for medical bills."
+            default:
+                updateRelationship(id) { $0.bond -= 25 }
+                karma -= 5
+                return "I ignored \(parent.firstName)'s health problems. \(parent.gender.subject.capitalized) won't forget that."
+            }
+
+        case .partnerProposes(let id):
+            guard let partner = relationships.first(where: { $0.id == id }) else { return "Never mind." }
+            touch(id)
+            if choice == 0 {
+                updateRelationship(id) { $0.kind = .fiance; $0.bond += 15 }
+                adjust(happiness: 20)
+                return "💍 I said YES to \(partner.firstName)! We're engaged!"
+            }
+            updateRelationship(id) { $0.bond -= 35 }
+            adjust(happiness: -8)
+            return "I turned down \(partner.firstName)'s proposal. \(partner.gender.subject.capitalized) was heartbroken."
+
+        case .partnerCheated(let id):
+            guard let partner = relationships.first(where: { $0.id == id }) else { return "Never mind." }
+            touch(id)
+            adjust(happiness: -15)
+            switch choice {
+            case 0:
+                updateRelationship(id) { $0.bond += 10 }
+                return "I forgave \(partner.firstName) for cheating. I hope I don't regret it."
+            case 1:
+                if roll(0.5) {
+                    updateRelationship(id) { $0.bond += 15 }
+                    return "I confronted \(partner.firstName). \(partner.gender.subject.capitalized) begged for forgiveness and promised to change."
+                }
+                updateRelationship(id) { $0.bond -= 20 }
+                return "I confronted \(partner.firstName) and it turned into a screaming match."
+            default:
+                relationships.removeAll { $0.id == id }
+                if partner.kind == .spouse {
+                    let settlement = max(0, money / 3)
+                    money -= settlement
+                    return "💔 I divorced \(partner.firstName) for cheating. The settlement cost me \(formatMoney(settlement))."
+                }
+                return "💔 I dumped \(partner.firstName) for cheating on me."
+            }
+
+        case .childInTrouble(let id):
+            guard let kid = relationships.first(where: { $0.id == id }) else { return "It sorted itself out." }
+            touch(id)
+            switch choice {
+            case 0:
+                if roll(0.65) {
+                    updateRelationship(id) { $0.bond += 20 }
+                    return "I had a long talk with \(kid.firstName). We understand each other much better now."
+                }
+                updateRelationship(id) { $0.bond -= 5 }
+                return "I tried to talk with \(kid.firstName), but \(kid.gender.subject) just rolled \(kid.gender.possessive) eyes and slammed the door."
+            case 1:
+                updateRelationship(id) { $0.bond -= 8 }
+                return "I grounded \(kid.firstName) for a month. \(kid.gender.subject.capitalized) says \(kid.gender.subject) hates me."
+            default:
+                updateRelationship(id) { $0.bond -= 3 }
+                karma -= 2
+                return "I let \(kid.firstName)'s behavior slide."
+            }
+
+        case .friendNeedsHelp(let id, let amount):
+            guard let friend = relationships.first(where: { $0.id == id }) else { return "Never mind." }
+            touch(id)
+            if choice == 0 {
+                money -= amount
+                karma += 3
+                updateRelationship(id) { $0.bond += 20 }
+                if friend.trait == .generous || roll(0.4) {
+                    let repaid = amount + amount / 5
+                    money += repaid
+                    return "I lent \(friend.firstName) \(formatMoney(amount)). \(friend.gender.subject.capitalized) paid me back \(formatMoney(repaid)) with a thank-you card."
+                }
+                return "I lent \(friend.firstName) \(formatMoney(amount)). I doubt I'll see it again, but our friendship is stronger."
+            }
+            updateRelationship(id) { $0.bond -= 15 }
+            return "I told \(friend.firstName) I couldn't help. Things are awkward between us now."
+
+        case .familyReunion:
+            let family = relationships.filter { $0.isAlive && ($0.kind.isParent || $0.kind == .sibling || $0.kind == .child) }
+            switch choice {
+            case 0:
+                for person in family {
+                    touch(person.id)
+                    updateRelationship(person.id) { $0.bond += .random(in: 3...10) }
+                }
+                adjust(happiness: 8)
+                return "👨‍👩‍👧‍👦 I had a wonderful time catching up with the whole family."
+            case 1:
+                for person in family {
+                    touch(person.id)
+                    updateRelationship(person.id) { $0.bond -= .random(in: 5...15) }
+                }
+                adjust(happiness: 3)
+                karma -= 2
+                return "🍿 I brought up old grudges at dinner and the reunion descended into chaos."
+            default:
+                for person in family {
+                    updateRelationship(person.id) { $0.bond -= .random(in: 1...5) }
+                }
+                return "I skipped the family reunion. Nobody was thrilled about it."
+            }
         }
     }
 }

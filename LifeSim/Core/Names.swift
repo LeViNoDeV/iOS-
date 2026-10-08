@@ -58,14 +58,17 @@ enum Names {
 
     static func person(kind: RelationKind, age: Int, gender: Gender? = nil, lastName: String? = nil, bond: Int? = nil) -> Relationship {
         let g = gender ?? Gender.allCases.randomElement()!
-        return Relationship(
+        var person = Relationship(
             kind: kind,
             firstName: first(for: g),
             lastName: lastName ?? randomLast(),
             gender: g,
             age: age,
             bond: bond ?? .random(in: 40...90),
-            money: .random(in: 0...80_000)
+            money: .random(in: 0...80_000),
+            trait: Trait.random()
         )
+        person.assignOccupation()
+        return person
     }
 }

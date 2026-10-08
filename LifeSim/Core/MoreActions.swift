@@ -145,7 +145,7 @@ extension Life {
         }
         if let partner = romanticPartner {
             karma -= 5
-            if roll(0.35) {
+            if roll(partner.trait == .jealous ? 0.6 : 0.35) {
                 updateRelationship(partner.id) { $0.bond -= 45 }
                 adjust(happiness: -15)
                 message += " \(partner.firstName) found out I cheated!"
