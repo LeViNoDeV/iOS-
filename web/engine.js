@@ -426,6 +426,19 @@ function jobSalary(L, level) {
   const b = branchOf(t);
   return b && level >= b.atLevel ? Math.trunc(pay * trackDefaults(jobTrack(L) || {}).payMultiplier) : pay;
 }
+/// Extra pay from fame for actors, musicians and athletes. Only top ranks earn millions.
+function fameBonus(L, level) {
+  if (!L.job || !jobTemplate(L).famous) return 0;
+  const rungs = currentLadder(L).length;
+  return Math.trunc(Math.pow(L.fame / 100, 3) * 1500000 * (level + 1) / rungs);
+}
+
+/// The most this job pays at its current rank. Raises stop here; a promotion is the way up.
+function salaryCap(L) {
+  if (!L.job) return 0;
+  return Math.trunc((jobSalary(L, L.job.level) + fameBonus(L, L.job.level)) * 1.35);
+}
+
 function mustChooseTrack(L) {
   if (!L.job) return false;
   const b = branchOf(jobTemplate(L));
@@ -646,8 +659,8 @@ function progressCareer(L) {
     popup(L, "📈", "Promoted!", promote(L));
     return;
   }
-  if (j.performance > 70 && j.years >= 2 && roll(0.25)) {
-    j.salary += Math.trunc(j.salary * rndf(0.04, 0.1));
+  if (j.performance > 70 && j.years >= 2 && j.salary < salaryCap(L) && roll(0.25)) {
+    j.salary = Math.min(salaryCap(L), j.salary + Math.trunc(j.salary * rndf(0.02, 0.05)));
     record(L, `💵 I got a raise! My salary is now ${formatMoney(j.salary)}.`);
     adjust(L, { happiness: 6 });
   }
@@ -662,9 +675,12 @@ function progressFame(L) {
     }
   }
   if (L.job && jobTemplate(L).famous) {
-    const gain = idiv(L.job.performance - 40, 6) + rnd(-3, 6);
+    // Fame grows slowly, and the closer you get to superstardom the harder it is.
+    let gain = idiv(L.job.performance - 60, 12) + rnd(-3, 3);
+    if (gain > 0 && L.fame > 40) gain = Math.round(gain * (100 - L.fame) / 60);
     L.fame = clamp(L.fame + gain, 0, 100);
-    L.job.salary = jobSalary(L, L.job.level) + L.fame * L.fame * 250;
+    // Pay follows fame (up or down), within the pay range for your rank.
+    L.job.salary = clamp(L.job.salary, jobSalary(L, L.job.level) + fameBonus(L, L.job.level), salaryCap(L));
     if (L.fame >= 50 && roll(0.2)) record(L, "⭐ Paparazzi followed me around all week. I'm famous!");
   } else if (L.fame > 0) {
     L.fame = Math.max(0, L.fame - rnd(1, 4));

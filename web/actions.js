@@ -251,8 +251,11 @@ function askForRaise(L) {
   if (!j) return out(L, "Raise", "I don't have a job.", false);
   if (j.usedActions.includes("raise")) return out(L, "Raise", "I already asked for a raise this year.", false);
   j.usedActions.push("raise");
+  if (j.salary >= salaryCap(L)) {
+    return out(L, "Raise", `My boss said I'm already at the top of the pay range for a ${j.title}. I'd need a promotion to earn more.`);
+  }
   if (roll(j.performance / 130)) {
-    const raise = Math.trunc(j.salary * rndf(0.05, 0.12));
+    const raise = Math.min(salaryCap(L) - j.salary, Math.trunc(j.salary * rndf(0.03, 0.07)));
     j.salary += raise;
     adjust(L, { happiness: 8 });
     return out(L, "Raise", `My boss gave me a ${formatMoney(raise)} raise!`);
@@ -305,7 +308,7 @@ function performJobAction(L, a) {
   if (roll(chance)) {
     j.performance = clamp(j.performance + a.performance, 0, 100);
     adjust(L, { happiness: a.happiness });
-    L.fame = clamp(L.fame + a.fame, 0, 100);
+    L.fame = clamp(L.fame + Math.round(a.fame * 0.6 * Math.pow(Math.max(0, 1 - L.fame / 100), 2)), 0, 100);
     L.karma += a.karma;
     m = `${a.emoji} ${a.success}`;
     if (a.bonus) { const b = rnd(a.bonus[0], a.bonus[1]); L.money += b; m += ` (+${formatMoney(b)})`; }
@@ -340,7 +343,8 @@ function promote(L) {
   j.level += 1;
   j.yearsInLevel = 0;
   j.title = ladder[j.level];
-  const newSalary = Math.max(j.salary, jobSalary(L, j.level));
+  // A promotion lifts you to the new rank's pay, with a small bump if you were already earning more.
+  const newSalary = Math.min(salaryCap(L), Math.max(jobSalary(L, j.level) + fameBonus(L, j.level), Math.trunc(j.salary * 1.08)));
   j.salary = newSalary;
   j.performance = Math.max(50, j.performance - 15);
   adjust(L, { happiness: 12 });
