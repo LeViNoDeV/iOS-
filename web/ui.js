@@ -21,6 +21,7 @@ function load() {
     const data = JSON.parse(raw);
     store.life = data.life || null;
     store.graveyard = data.graveyard || [];
+    store.timeMachine = data.timeMachine || [];
     store.settings = { mature: true, ...(data.settings || {}) };
   } catch (e) { /* ignore a corrupt or blocked save */ }
 }
@@ -80,6 +81,7 @@ function act(fn) {
 function ageUpNow() {
   const L = store.life;
   if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || ui.outcome || ui.choice) return;
+  pushSnapshot(L);
   ageUp(L);
   if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
   ui.openings = null;
@@ -207,6 +209,7 @@ function renderDeath(L) {
     ${heirs.length ? section("Continue as your child", heirs.map((c) => row(relEmoji(c), relName(c), `${relTitle(c)} · Age ${c.age}`, () => {
       store.life = continueAs(L, c); store.life.mature = !!store.settings.mature; store.life.protection = true; ui.stack = []; ui.tab = "career"; ui.openings = null; save(); render(true);
     }, { chev: true })).join(""), "Your money is split between your living children.") : ""}
+    ${snapshotsFor(L).length ? section("⏳ Time Machine", timeMachineRows(L), "Not ready to go? Go back in time and live it differently.") : ""}
     <button class="age-btn" data-h="${h(() => { store.life = null; save(); render(); })}">Start a new life</button>
   </div></div>`;
 }
@@ -236,7 +239,7 @@ function renderGame(L) {
   if (L.pregnancy) chips.push(`<span class="chip warn">🤰 ${L.pregnancy.carrier === "me" ? "Pregnant" : `${esc(L.pregnancy.partnerName)} is pregnant`} · due next year</span>`);
 
   const blocked = L.pendingEvents.length > 0 || (L.popups || []).length > 0;
-  const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["profile", "🪪", "Profile"]];
+  const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["profile", "🪪", "Profile"], ["god", "⚡", "God"]];
 
   return `<div class="game">
     <aside class="pane me" aria-label="You">
@@ -280,6 +283,7 @@ function renderSide(L) {
     case "people": return renderPeople(L);
     case "activities": return inPrison(L) ? renderPrison(L) : renderActivities(L);
     case "profile": return renderProfile(L);
+    case "god": return renderGodMode(L);
   }
   return "";
 }
@@ -638,6 +642,7 @@ function renderSubview(L, view) {
     case "market": return renderMarket(L, view);
     case "casino": return renderCasino(L);
     case "emigrate": return renderEmigrate(L);
+    case "godPerson": return renderGodPerson(L, view);
   }
   return "";
 }
@@ -730,6 +735,8 @@ function start(data) {
   else load();
   document.addEventListener("click", onClick);
   document.addEventListener("keydown", onKey);
+  document.addEventListener("input", onGodInput);
+  document.addEventListener("change", onGodChange);
   render(true);
 }
 
