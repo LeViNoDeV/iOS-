@@ -120,17 +120,56 @@ function dealDrugs(L) {
 
 // MARK: Sex (non-explicit) and its consequences
 
-/// A one-in-whatever chance of a baby when two people of different genders sleep together unprotected.
-function maybePregnancy(L, partnerGender, partnerName, chance) {
-  // Adults only: pregnancy is never possible for characters under 18.
-  if (L.age < 18 || partnerGender === L.gender || L.age > 50 || !roll(chance)) return "";
+/// Starts a pregnancy (the player's or their partner's). The baby arrives the next year.
+/// Adults only: pregnancy is never possible for characters under 18.
+function startPregnancy(L, partner) {
+  if (L.age < 18 || L.pregnancy) return "";
+  L.pregnancy = { partnerId: partner.id || null, partnerName: partner.firstName, carrier: L.gender === "female" ? "me" : "partner", dueAge: L.age + 1 };
+  const text = L.gender === "female" ? "I'm pregnant! 🤰 The baby is due next year." : `${partner.firstName} is pregnant! 🤰 The baby is due next year.`;
+  popup(L, "🤰", "Pregnant!", text);
+  return " " + text;
+}
+
+/// A chance of pregnancy when two adults of different genders sleep together unprotected.
+function maybePregnancy(L, partnerGender, partnerName, chance, partnerId = null) {
+  if (L.age < 18 || partnerGender === L.gender || L.age > 50 || L.pregnancy || !roll(chance)) return "";
+  return startPregnancy(L, { id: partnerId, firstName: partnerName, gender: partnerGender });
+}
+
+/// Runs each year: a pregnancy that started last year ends with a birth.
+function progressPregnancy(L) {
+  const pg = L.pregnancy;
+  if (!pg || L.age < pg.dueAge) return;
+  L.pregnancy = null;
   const g = pick(["male", "female"]);
-  const baby = makePerson("child", 0, { gender: g, lastName: L.lastName, bond: 90 });
+  const baby = makePerson("child", 0, { gender: g, lastName: L.lastName, bond: 95 });
   baby.occupation = null; baby.salary = 0; baby.money = 0; baby.lastContact = L.age;
   L.relationships.push(baby);
-  adjust(L, { happiness: rnd(-5, 10) });
-  const who = L.gender === "female" ? "I got pregnant" : `${partnerName} got pregnant`;
-  return ` ${who}. Nine months later, baby ${baby.firstName} arrived. 👶`;
+  const partner = pg.partnerId ? findRel(L, pg.partnerId) : null;
+  if (partner) { touch(L, partner.id); updateRel(L, partner.id, (x) => { x.bond += 8; }); }
+  if (pg.carrier === "me") adjust(L, { health: -4, happiness: 12 });
+  else adjust(L, { happiness: 10 });
+  const who = pg.carrier === "me" ? "I gave birth" : `${pg.partnerName} gave birth`;
+  notify(L, "👶", g === "male" ? "It's a Boy!" : "It's a Girl!", `👶 ${who} to a baby ${g === "male" ? "boy" : "girl"} named ${baby.firstName}!`);
+}
+
+/// Sex with your partner. Unprotected sex is how you try for a baby.
+function haveSex(L, partnerId, protectedSex) {
+  const p = findRel(L, partnerId);
+  if (!p) return out(L, "Romance", "That person isn't in my life anymore.", false);
+  if (!isMature(L) || p.age < 18) return out(L, "Romance", "That's not available.", false);
+  touch(L, p.id);
+  updateRel(L, p.id, (x) => { x.bond += rnd(4, 12); });
+  adjust(L, { happiness: rnd(6, 12), health: 1 });
+  let m = `🔥 ${pick(["I spent a steamy night with", "Candles, music, and a long night with", "Things got heated with"])} ${p.firstName}${protectedSex ? ". We were careful." : "."}`;
+  if (!protectedSex) {
+    L.lastUnprotected = L.age;
+    if (p.gender === L.gender) m += " (We'd need to adopt or use a donor to have a baby.)";
+    else if (L.pregnancy) m += "";
+    else m += maybePregnancy(L, p.gender, p.firstName, 0.3, p.id) || " No baby news yet.";
+    m += maybeStd(L, 0.01);
+  }
+  return out(L, "Romance", remember(L, p, m));
 }
 
 function maybeStd(L, chance) {
@@ -149,19 +188,7 @@ function caughtCheating(L, chance) {
   return ` ${partner.firstName} found out I cheated!`;
 }
 
-function romanticNight(L, partnerId) {
-  const p = findRel(L, partnerId);
-  if (!p) return out(L, "Romance", "That person isn't in my life anymore.", false);
-  if (!isMature(L) || p.age < 18) return out(L, "Romance", "That's not available.", false);
-  touch(L, p.id);
-  updateRel(L, p.id, (x) => { x.bond += rnd(4, 12); });
-  adjust(L, { happiness: rnd(6, 12), health: 1 });
-  let m = `🌹 ${pick(["I spent a steamy night with", "I had a romantic evening in with", "Candles, music, and a long night with"])} ${p.firstName}. 🔥`;
-  if (!L.protection) m += maybePregnancy(L, p.gender, p.firstName, 0.18);
-  return out(L, "Romance", m);
-}
-
-function oneNightStand(L) {
+function oneNightStand(L, protectedSex = true) {
   if (!isMature(L)) return out(L, "One-Night Stand", "That's not available.", false);
   if (!roll(0.4 + L.stats.looks / 200)) {
     adjust(L, { happiness: -4 });
@@ -171,13 +198,13 @@ function oneNightStand(L) {
   bump(L, "partners");
   adjust(L, { happiness: rnd(6, 12) });
   let m = `🔥 I went home with ${relName(p)} (${p.age}) from the bar. ${pick(["No regrets.", "The walk of shame was worth it.", "We didn't exchange numbers."])}`;
-  m += maybeStd(L, L.protection ? 0.02 : 0.12);
-  if (!L.protection) m += maybePregnancy(L, p.gender, p.firstName, 0.08);
+  m += maybeStd(L, protectedSex ? 0.02 : 0.12);
+  if (!protectedSex) m += maybePregnancy(L, p.gender, p.firstName, 0.08);
   m += caughtCheating(L, 0.35);
   return out(L, "One-Night Stand", m);
 }
 
-function datingAppHookup(L) {
+function datingAppHookup(L, protectedSex = true) {
   if (!isMature(L)) return out(L, "Dating App", "That's not available.", false);
   const p = makePerson("friend", Math.max(18, L.age + rnd(-6, 6)), { gender: preferredGender(L) });
   if (roll(0.2)) {
@@ -187,8 +214,8 @@ function datingAppHookup(L) {
   bump(L, "partners");
   adjust(L, { happiness: rnd(5, 10) });
   let m = `📱 I matched with ${relName(p)} (${p.age}) and we hooked up the same night. 🔥`;
-  m += maybeStd(L, L.protection ? 0.02 : 0.1);
-  if (!L.protection) m += maybePregnancy(L, p.gender, p.firstName, 0.08);
+  m += maybeStd(L, protectedSex ? 0.02 : 0.1);
+  if (!protectedSex) m += maybePregnancy(L, p.gender, p.firstName, 0.08);
   m += caughtCheating(L, 0.3);
   return out(L, "Dating App", m);
 }
@@ -206,7 +233,7 @@ function stripClub(L) {
   return out(L, "Strip Club", m);
 }
 
-function friendsWithBenefits(L, friendId) {
+function friendsWithBenefits(L, friendId, protectedSex = true) {
   const f = findRel(L, friendId);
   if (!f) return out(L, "Friends with Benefits", "They're not in my life anymore.", false);
   if (!isMature(L) || f.age < 18) return out(L, "Friends with Benefits", "That's not available.", false);
@@ -220,8 +247,8 @@ function friendsWithBenefits(L, friendId) {
       updateRel(L, f.id, (x) => { x.kind = "partner"; x.bond += 10; x.yearsTogether = 0; });
       m += " Then we caught feelings. We're officially dating now. 💕";
     }
-    m += maybeStd(L, L.protection ? 0.01 : 0.05);
-    if (!L.protection) m += maybePregnancy(L, f.gender, f.firstName, 0.1);
+    m += maybeStd(L, protectedSex ? 0.01 : 0.05);
+    if (!protectedSex) m += maybePregnancy(L, f.gender, f.firstName, 0.1, f.id);
     m += caughtCheating(L, 0.35);
     return out(L, "Friends with Benefits", m);
   }
@@ -251,7 +278,7 @@ Object.assign(SIMPLE_EVENTS, {
     resolve: (L, d, c) => {
       if (c === 1) { adjust(L, { happiness: 2 }); return `I left ${d.name} on read. Growth.`; }
       bump(L, "partners"); adjust(L, { happiness: rnd(-4, 8) });
-      return `🔥 I went over to ${d.name}'s place. ${pick(["It was a mistake.", "Old habits die hard.", "We are definitely not getting back together."])}` + maybeStd(L, L.protection ? 0.01 : 0.06) + caughtCheating(L, 0.35);
+      return `🔥 I went over to ${d.name}'s place. ${pick(["It was a mistake.", "Old habits die hard.", "We are definitely not getting back together."])}` + maybeStd(L, 0.04) + caughtCheating(L, 0.35);
     },
   },
   bachelorParty: {
@@ -294,7 +321,7 @@ Object.assign(SIMPLE_EVENTS, {
     },
   },
   pregnancyScare: {
-    emoji: "😰", title: "Pregnancy Scare", min: 18, max: 45, when: (L) => isMature(L) && !L.protection && romanticPartner(L) && romanticPartner(L).age >= 18 && romanticPartner(L).gender !== L.gender,
+    emoji: "😰", title: "Pregnancy Scare", min: 18, max: 45, when: (L) => isMature(L) && !L.pregnancy && L.lastUnprotected >= L.age - 1 && romanticPartner(L) && romanticPartner(L).age >= 18 && romanticPartner(L).gender !== L.gender,
     make: (L) => { const p = romanticPartner(L); return { data: { id: p.id }, message: `${L.gender === "female" ? "You're" : `${p.firstName} is`} late. It might be a pregnancy.` }; },
     options: ["Take a test together", "Panic"],
     resolve: (L, d, c) => {
@@ -302,8 +329,8 @@ Object.assign(SIMPLE_EVENTS, {
       if (!p) return "False alarm.";
       touch(L, p.id);
       if (c === 0) updateRel(L, p.id, (x) => { x.bond += 6; }); else adjust(L, { happiness: -5 });
-      const baby = maybePregnancy(L, p.gender, p.firstName, 0.5);
-      return baby ? `It's positive!${baby}` : "😮‍💨 False alarm. The test was negative.";
+      const baby = maybePregnancy(L, p.gender, p.firstName, 0.5, p.id);
+      return baby ? `The test is positive!${baby}` : "😮‍💨 False alarm. The test was negative.";
     },
   },
   strippoker: {

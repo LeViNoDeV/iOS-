@@ -198,7 +198,7 @@ const PrisonActions = [
 
 const RelActions = {
   spendTime: "Spend Time", conversation: "Have a Conversation", compliment: "Compliment", gift: "Give a Gift ($100)",
-  askForMoney: "Ask for Money", argue: "Argue", propose: "Propose 💍", marry: "Get Married 💒", haveBaby: "Try for a Baby 👶",
+  askForMoney: "Ask for Money", argue: "Argue", propose: "Propose 💍", marry: "Get Married 💒", haveBaby: "Try for a Baby 👶", haveSex: "Have Sex 🔥",
   breakUp: "Break Up", play: "Play", walkPet: "Go for a Walk", insult: "Insult", prank: "Prank", assault: "Assault 👊", murder: "Murder 🔪",
 };
 const hostileActions = new Set(["argue", "breakUp", "insult", "prank", "assault", "murder"]);

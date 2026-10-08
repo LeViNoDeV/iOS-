@@ -89,6 +89,15 @@ function ageUpNow() {
 
 function choose(title, message, options) { ui.choice = { title, message, options }; render(); }
 
+/// Asks "protected or unprotected?" before any sexual action (adult characters only).
+function askProtection(title, run) {
+  choose(title, "Protected or unprotected?", [
+    { label: "🛡️ Protected", fn: () => run(true) },
+    { label: "⚠️ Unprotected", fn: () => run(false) },
+    { label: "Never mind", secondary: true, fn: () => {} },
+  ]);
+}
+
 function startLife(first, last, gender) {
   store.life = newLife(first, last, gender);
   store.life.mature = !!store.settings.mature;
@@ -224,6 +233,7 @@ function renderGame(L) {
   for (const a of L.addictions) chips.push(`<span class="chip bad">⚠️ ${esc(Addictions[a])}</span>`);
   if (inPrison(L)) chips.push(`<span class="chip bad">🔒 In prison</span>`);
   if (L.mature) chips.push(`<span class="chip">🔞 Mature</span>`);
+  if (L.pregnancy) chips.push(`<span class="chip warn">🤰 ${L.pregnancy.carrier === "me" ? "Pregnant" : `${esc(L.pregnancy.partnerName)} is pregnant`} · due next year</span>`);
 
   const blocked = L.pendingEvents.length > 0 || (L.popups || []).length > 0;
   const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["profile", "🪪", "Profile"]];
@@ -460,11 +470,11 @@ function renderPeople(L) {
   if (isMature(L) && !inPrison(L)) {
     const partner = romanticPartner(L);
     const adultFriends = L.relationships.filter((p) => p.isAlive && p.kind === "friend" && p.age >= 18);
-    let love = row(L.protection ? "🛡️" : "⚠️", `Protection: ${L.protection ? "Always" : "Never"}`, L.protection ? "Much lower risk of STDs, no surprise babies" : "Risk of STDs and pregnancy", () => { L.protection = !L.protection; save(); render(); }, { right: "Change" });
-    if (partner && partner.age >= 18) love += row("🌹", `Romantic night with ${partner.firstName}`, "Strengthens your relationship", () => act((x) => romanticNight(x, partner.id)));
-    love += row("🔥", "One-night stand", partner ? "Cheat on your partner..." : "Find someone at a bar", () => act(oneNightStand));
-    love += row("📱", "Dating app hookup", "Swipe right", () => act(datingAppHookup));
-    if (adultFriends.length) love += row("😏", "Friends with benefits", "Ask a friend", () => choose("Who do you ask?", null, adultFriends.map((f) => ({ label: relName(f), fn: () => act((x) => friendsWithBenefits(x, f.id)) }))), { chev: true });
+    let love = "";
+    if (partner && partner.age >= 18) love += row("🔥", `Have sex with ${partner.firstName}`, L.pregnancy ? "A baby is already on the way" : "Unprotected sex can lead to a baby", () => askProtection(`Have sex with ${partner.firstName}?`, (safe) => act((x) => haveSex(x, partner.id, safe))), { chev: true });
+    love += row("🍸", "One-night stand", partner ? "Cheat on your partner..." : "Find someone at a bar", () => askProtection("One-night stand", (safe) => act((x) => oneNightStand(x, safe))), { chev: true });
+    love += row("📱", "Dating app hookup", "Swipe right", () => askProtection("Dating app hookup", (safe) => act((x) => datingAppHookup(x, safe))), { chev: true });
+    if (adultFriends.length) love += row("😏", "Friends with benefits", "Ask a friend", () => choose("Who do you ask?", null, adultFriends.map((f) => ({ label: relName(f), fn: () => askProtection(`Friends with benefits with ${f.firstName}`, (safe) => act((x) => friendsWithBenefits(x, f.id, safe))) }))), { chev: true });
     love += row("💃", "Strip club", "$250", () => act(stripClub));
     html += section("Love life 🔞", love, `${count(L, "partners")} partners so far.`);
   }
@@ -522,7 +532,9 @@ function renderPerson(L, view) {
   const actions = relationshipActions(L, p);
   if (actions.length) {
     html += section("Interact", actions.map((a) => {
-      const run = () => act((x) => performRelAction(x, a, p.id));
+      let run = () => act((x) => performRelAction(x, a, p.id));
+      if (a === "haveSex") run = () => askProtection(`Have sex with ${p.firstName}?`, (safe) => act((x) => haveSex(x, p.id, safe)));
+      if (a === "hookUpWith") run = () => askProtection(`Hook up with ${p.firstName}?`, (safe) => act((x) => hookUpWithPerson(x, p.id, safe)));
       const fn = a === "murder" || a === "breakUp"
         ? () => choose(a === "murder" ? `Murder ${p.firstName}?` : `${p.kind === "spouse" ? "Divorce" : "Break up with"} ${p.firstName}?`,
           a === "murder" ? "This can't be undone, and you may spend decades in prison." : null,

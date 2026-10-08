@@ -561,9 +561,12 @@ function relationshipActions(L, p) {
   if (L.age >= 6) list.push("prank");
   if (L.age >= 14) list.push("assault");
   if (L.age >= 16) list.push("murder");
-  if (p.kind === "partner") { if (L.age >= 18 && p.age >= 18) list.push("propose"); list.push("breakUp"); if (L.age >= 18 && p.age >= 18) list.push("haveBaby"); }
-  if (p.kind === "fiance") list.push("marry", "haveBaby", "breakUp");
-  if (p.kind === "spouse") list.push("haveBaby", "breakUp");
+  // Adults only: in Mature Mode couples "Have Sex" (protected or not); otherwise they can "Try for a Baby".
+  const adults = L.age >= 18 && p.age >= 18;
+  const intimacy = adults && isRomantic(p.kind) ? [isMature(L) ? "haveSex" : "haveBaby"] : [];
+  if (p.kind === "partner") { if (adults) list.push("propose"); list.push(...intimacy, "breakUp"); }
+  if (p.kind === "fiance") list.push("marry", ...intimacy, "breakUp");
+  if (p.kind === "spouse") list.push(...intimacy, "breakUp");
   return list;
 }
 
@@ -575,6 +578,7 @@ function performRelAction(L, action, id) {
   const upd = (fn) => updateRel(L, id, fn);
   let m;
   touch(L, id);
+  if (action === "haveSex") return haveSex(L, id, true);
   if (EXTRA_REL[action]) return performExtraRelAction(L, action, p);
   const rejection = rejectionText(L, p, action);
   if (rejection) return out(L, relName(p), remember(L, p, rejection));
@@ -606,16 +610,11 @@ function performRelAction(L, action, id) {
       break;
     case "marry": { const cost = rnd(5000, 30000); L.money -= cost; upd((x) => { x.kind = "spouse"; x.bond += 10; }); adjust(L, { happiness: 20 }); m = `💒 I married ${name} in a beautiful ${formatMoney(cost)} ceremony!`; break; }
     case "haveBaby":
-      if (L.age > 50 || p.age > 50 || !roll(0.55)) m = "We tried for a baby, but it didn't happen this time.";
-      else {
-        const g = pick(["male", "female"]);
-        const baby = makePerson("child", 0, { gender: g, lastName: L.lastName, bond: 100 });
-        baby.occupation = null; baby.salary = 0; baby.money = 0; baby.lastContact = L.age;
-        L.relationships.push(baby);
-        upd((x) => { x.bond += 5; });
-        adjust(L, { happiness: 15 });
-        m = `👶 We welcomed a baby ${g === "male" ? "boy" : "girl"} named ${baby.firstName}!`;
-      }
+      if (L.pregnancy) m = "We already have a baby on the way!";
+      else if (L.age < 18 || p.age < 18) m = "That's not possible.";
+      else if (p.gender === L.gender) m = "We'd need to adopt or use a donor to have a baby.";
+      else if (L.age > 50 || p.age > 50 || !roll(0.55)) m = "We tried for a baby, but it didn't happen this time.";
+      else { upd((x) => { x.bond += 5; }); adjust(L, { happiness: 8 }); m = startPregnancy(L, p).trim(); }
       break;
     case "breakUp":
       becomeEx(L, p);

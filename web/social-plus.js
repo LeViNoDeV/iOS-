@@ -84,7 +84,15 @@ const secrets = [
   "they're secretly in debt", "they've always looked up to me", "they're scared of getting old", "they've been seeing a therapist",
 ];
 
-function performExtraRelAction(L, action, p) {
+/// Hooking up with someone you know, after choosing protected or unprotected.
+function hookUpWithPerson(L, id, protectedSex) {
+  const p = findRel(L, id);
+  if (!p) return out(L, "Oops", "That person is no longer in my life.", false);
+  touch(L, id);
+  return performExtraRelAction(L, "hookUpWith", p, { protectedSex });
+}
+
+function performExtraRelAction(L, action, p, opts = {}) {
   const name = p.firstName;
   const pr = pronoun(p.gender);
   const upd = (fn) => updateRel(L, p.id, fn);
@@ -176,8 +184,10 @@ function performExtraRelAction(L, action, p) {
       adjust(L, { happiness: rnd(6, 11) });
       upd((x) => { x.bond += rnd(-6, 10); });
       let m = `🔥 ${name} and I hooked up. ${pick(["Things got complicated.", "Neither of us regrets it.", "We agreed to never speak of it again."])}`;
-      m += maybeStd(L, L.protection ? 0.01 : 0.05);
-      if (!L.protection) m += maybePregnancy(L, p.gender, name, 0.1);
+      const protectedSex = opts.protectedSex ?? true;
+      if (!protectedSex) L.lastUnprotected = L.age;
+      m += maybeStd(L, protectedSex ? 0.01 : 0.05);
+      if (!protectedSex) m += maybePregnancy(L, p.gender, name, 0.1, p.id);
       if (romanticPartner(L) && romanticPartner(L).id !== p.id) m += caughtCheating(L, 0.4);
       return done(m);
     }
@@ -237,6 +247,7 @@ function refreshSchoolPeople(L) {
 // MARK: People living their own lives
 
 function progressPeople(L) {
+  progressPregnancy(L);
   refreshSchoolPeople(L);
 
   for (const p of L.relationships) {
