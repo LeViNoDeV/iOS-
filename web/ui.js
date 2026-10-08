@@ -2,7 +2,7 @@
 "use strict";
 
 const SAVE_KEY = "lifesim-save-v1";
-const store = { life: null, graveyard: [] };
+const store = { life: null, graveyard: [], settings: { mature: false } };
 const ui = {
   tab: "career", stack: [], outcome: null, choice: null, openings: null, bet: 1000,
   form: { first: "", last: "", gender: "male" }, lastAgeShown: -1,
@@ -21,6 +21,7 @@ function load() {
     const data = JSON.parse(raw);
     store.life = data.life || null;
     store.graveyard = data.graveyard || [];
+    store.settings = { mature: false, ...(data.settings || {}) };
   } catch (e) { /* ignore a corrupt or blocked save */ }
 }
 
@@ -90,6 +91,8 @@ function choose(title, message, options) { ui.choice = { title, message, options
 
 function startLife(first, last, gender) {
   store.life = newLife(first, last, gender);
+  store.life.mature = !!store.settings.mature;
+  store.life.protection = true;
   ui.tab = "career"; ui.stack = []; ui.outcome = null; ui.choice = null; ui.openings = null;
   save();
   render(true);
@@ -118,6 +121,26 @@ function render(scrollLog = false) {
   app.querySelector(".modal .choice")?.focus();
 }
 
+// MARK: Mature Mode
+
+function setMature(on) {
+  const apply = () => {
+    store.settings.mature = on;
+    if (store.life) { store.life.mature = on; if (store.life.protection == null) store.life.protection = true; }
+    save();
+  };
+  if (!on) { apply(); render(); return; }
+  choose("Turn on Mature Mode?", "Mature Mode adds drinking, hard drugs and sex (kept non-explicit) for adult characters. You must be 18 or older to play it.", [
+    { label: "I'm 18 or older, turn it on", fn: apply },
+    { label: "Cancel", secondary: true, fn: () => {} },
+  ]);
+}
+
+function matureToggleRow() {
+  const on = !!store.settings.mature;
+  return row("🔞", `Mature Mode: ${on ? "On" : "Off"}`, on ? "Drinking, drugs and sex for adult characters" : "Adds drinking, drugs and sex (18+ only)", () => setMature(!on), { right: on ? "Turn off" : "Turn on" });
+}
+
 // MARK: Start screen
 
 function renderStart() {
@@ -143,6 +166,7 @@ function renderStart() {
         <button class="btn primary" style="margin-left:auto" data-h="${h(() => { readForm(); startLife(f.first, f.last, f.gender); })}">Start this life</button>
       </div>
     </div>
+    ${section("Settings", matureToggleRow())}
     ${grave}
   </div></div>`;
 }
@@ -171,7 +195,7 @@ function renderDeath(L) {
       ${lv("Generation", L.generation)}
     </div>
     ${heirs.length ? section("Continue as your child", heirs.map((c) => row(relEmoji(c), relName(c), `${relTitle(c)} · Age ${c.age}`, () => {
-      store.life = continueAs(L, c); ui.stack = []; ui.tab = "career"; ui.openings = null; save(); render(true);
+      store.life = continueAs(L, c); store.life.mature = !!store.settings.mature; store.life.protection = true; ui.stack = []; ui.tab = "career"; ui.openings = null; save(); render(true);
     }, { chev: true })).join(""), "Your money is split between your living children.") : ""}
     <button class="age-btn" data-h="${h(() => { store.life = null; save(); render(); })}">Start a new life</button>
   </div></div>`;
@@ -198,6 +222,7 @@ function renderGame(L) {
   for (const id of L.illnesses) chips.push(`<span class="chip warn">🤒 ${esc(Illnesses[id].name.replace(/^an? /, ""))}</span>`);
   for (const a of L.addictions) chips.push(`<span class="chip bad">⚠️ ${esc(Addictions[a])}</span>`);
   if (inPrison(L)) chips.push(`<span class="chip bad">🔒 In prison</span>`);
+  if (L.mature) chips.push(`<span class="chip">🔞 Mature</span>`);
 
   const blocked = L.pendingEvents.length > 0 || (L.popups || []).length > 0;
   const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["profile", "🪪", "Profile"]];
@@ -431,6 +456,18 @@ function renderPeople(L) {
     html += section("Meet people", meet);
   }
 
+  if (isMature(L) && !inPrison(L)) {
+    const partner = romanticPartner(L);
+    const adultFriends = L.relationships.filter((p) => p.isAlive && p.kind === "friend" && p.age >= 18);
+    let love = row(L.protection ? "🛡️" : "⚠️", `Protection: ${L.protection ? "Always" : "Never"}`, L.protection ? "Much lower risk of STDs, no surprise babies" : "Risk of STDs and pregnancy", () => { L.protection = !L.protection; save(); render(); }, { right: "Change" });
+    if (partner && partner.age >= 18) love += row("🌹", `Romantic night with ${partner.firstName}`, "Strengthens your relationship", () => act((x) => romanticNight(x, partner.id)));
+    love += row("🔥", "One-night stand", partner ? "Cheat on your partner..." : "Find someone at a bar", () => act(oneNightStand));
+    love += row("📱", "Dating app hookup", "Swipe right", () => act(datingAppHookup));
+    if (adultFriends.length) love += row("😏", "Friends with benefits", "Ask a friend", () => choose("Who do you ask?", null, adultFriends.map((f) => ({ label: relName(f), fn: () => act((x) => friendsWithBenefits(x, f.id)) }))), { chev: true });
+    love += row("💃", "Strip club", "$250", () => act(stripClub));
+    html += section("Love life 🔞", love, `${count(L, "partners")} partners so far.`);
+  }
+
   const groups = [
     ["Family", (p) => isParent(p.kind) || p.kind === "sibling"],
     ["Love", (p) => isRomantic(p.kind)],
@@ -509,6 +546,13 @@ function renderActivities(L) {
 
   html += section("Social media", row("📱", "Post on social media", canPostOnSocialMedia(L) ? `${formatCount(L.followers)} followers` : "Available at 13", () => act(postOnSocialMedia), { disabled: !canPostOnSocialMedia(L) }));
   for (const [title, ids] of ActivityGroups.slice(1)) html += activitySection(L, title, ids);
+  if (isMature(L)) {
+    html += section("Bar 🔞", Drinks.map((d) => row(d.emoji, d.title, formatMoney(d.cost), () => act((x) => haveDrink(x, d.id)))).join(""),
+      `You've had ${count(L, "drinks")} drinking nights. The more you drink, the likelier you are to get hooked.`);
+    html += section("Drugs 🔞", Drugs.map((d) => row(d.emoji, d.title, `${formatMoney(d.cost)} · ${d.od >= 0.03 ? "Very dangerous" : d.addict >= 0.15 ? "Highly addictive" : d.trip ? "Bad trips happen" : "Risky"}`, () => act((x) => takeDrug(x, d.id)))).join("")
+      + row("💰", "Deal drugs", "Big money, big risk of prison", () => act(dealDrugs), { danger: true }),
+      "Drugs can get you hooked, arrested, or killed. Rehab is in the Health section.");
+  }
 
   let more = row("🎰", "Casino", L.age >= 18 ? "Blackjack, roulette, slots & horses" : "Available at 18", () => push({ type: "casino" }), { disabled: L.age < 18, chev: true });
   if (canTakeDrivingTest(L)) more += row("🚦", "Driving test", "Get your license", () => act(takeDrivingTest));
@@ -561,6 +605,7 @@ function renderProfile(L) {
   if (L.criminalRecord.length || inPrison(L)) {
     html += section("Criminal record", (inPrison(L) ? lv("In prison", `${plural(L.prisonYearsLeft, "year")} left`) : "") + L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   }
+  html += section("Settings", matureToggleRow());
   html += section("Ribbon so far", (() => { const r = Ribbons[ribbonOf(L)]; return `<div class="pad">${r[1]} <b>${r[0]}</b> <span class="muted">· ${r[2]}</span></div>`; })(),
     "The ribbon you earn is decided when you die.");
   return html;
