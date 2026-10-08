@@ -26,6 +26,7 @@ const drunkStories = [
 ];
 
 function haveDrink(L, id) {
+  if (!isMature(L)) return out(L, "Bar", "That's not available.", false);
   const d = Drinks.find((x) => x.id === id);
   L.money -= d.cost;
   bump(L, "drinks");
@@ -63,6 +64,7 @@ const Drugs = [
 ];
 
 function takeDrug(L, id, silent = false) {
+  if (!isMature(L)) return out(L, "Drugs", "That's not available.", false);
   const d = Drugs.find((x) => x.id === id);
   L.money -= d.cost;
   bump(L, "drugUse");
@@ -99,6 +101,7 @@ function takeDrug(L, id, silent = false) {
 }
 
 function dealDrugs(L) {
+  if (!isMature(L)) return out(L, "Dealing", "That's not available.", false);
   L.karma -= 6;
   bump(L, "crimes");
   if (roll(0.25)) {
@@ -119,7 +122,8 @@ function dealDrugs(L) {
 
 /// A one-in-whatever chance of a baby when two people of different genders sleep together unprotected.
 function maybePregnancy(L, partnerGender, partnerName, chance) {
-  if (partnerGender === L.gender || L.age > 50 || !roll(chance)) return "";
+  // Adults only: pregnancy is never possible for characters under 18.
+  if (L.age < 18 || partnerGender === L.gender || L.age > 50 || !roll(chance)) return "";
   const g = pick(["male", "female"]);
   const baby = makePerson("child", 0, { gender: g, lastName: L.lastName, bond: 90 });
   baby.occupation = null; baby.salary = 0; baby.money = 0; baby.lastContact = L.age;
@@ -148,6 +152,7 @@ function caughtCheating(L, chance) {
 function romanticNight(L, partnerId) {
   const p = findRel(L, partnerId);
   if (!p) return out(L, "Romance", "That person isn't in my life anymore.", false);
+  if (!isMature(L) || p.age < 18) return out(L, "Romance", "That's not available.", false);
   touch(L, p.id);
   updateRel(L, p.id, (x) => { x.bond += rnd(4, 12); });
   adjust(L, { happiness: rnd(6, 12), health: 1 });
@@ -157,6 +162,7 @@ function romanticNight(L, partnerId) {
 }
 
 function oneNightStand(L) {
+  if (!isMature(L)) return out(L, "One-Night Stand", "That's not available.", false);
   if (!roll(0.4 + L.stats.looks / 200)) {
     adjust(L, { happiness: -4 });
     return out(L, "One-Night Stand", "🙈 I struck out all night. Going home alone.");
@@ -172,6 +178,7 @@ function oneNightStand(L) {
 }
 
 function datingAppHookup(L) {
+  if (!isMature(L)) return out(L, "Dating App", "That's not available.", false);
   const p = makePerson("friend", Math.max(18, L.age + rnd(-6, 6)), { gender: preferredGender(L) });
   if (roll(0.2)) {
     adjust(L, { happiness: -5 });
@@ -187,6 +194,7 @@ function datingAppHookup(L) {
 }
 
 function stripClub(L) {
+  if (!isMature(L)) return out(L, "Strip Club", "That's not available.", false);
   L.money -= 250;
   adjust(L, { happiness: rnd(4, 9) });
   let m = `💃 I spent $250 at the strip club. ${pick(["The DJ was great.", "I made it rain (one-dollar bills).", "My friends dragged me there, honest."])}`;
@@ -201,6 +209,7 @@ function stripClub(L) {
 function friendsWithBenefits(L, friendId) {
   const f = findRel(L, friendId);
   if (!f) return out(L, "Friends with Benefits", "They're not in my life anymore.", false);
+  if (!isMature(L) || f.age < 18) return out(L, "Friends with Benefits", "That's not available.", false);
   touch(L, f.id);
   if (roll(f.bond / 130)) {
     bump(L, "partners");
@@ -285,7 +294,7 @@ Object.assign(SIMPLE_EVENTS, {
     },
   },
   pregnancyScare: {
-    emoji: "😰", title: "Pregnancy Scare", min: 18, max: 45, when: (L) => !!L.mature && !L.protection && romanticPartner(L) && romanticPartner(L).gender !== L.gender,
+    emoji: "😰", title: "Pregnancy Scare", min: 18, max: 45, when: (L) => isMature(L) && !L.protection && romanticPartner(L) && romanticPartner(L).age >= 18 && romanticPartner(L).gender !== L.gender,
     make: (L) => { const p = romanticPartner(L); return { data: { id: p.id }, message: `${L.gender === "female" ? "You're" : `${p.firstName} is`} late. It might be a pregnancy.` }; },
     options: ["Take a test together", "Panic"],
     resolve: (L, d, c) => {

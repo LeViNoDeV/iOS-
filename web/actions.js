@@ -509,7 +509,7 @@ function findDate(L, gender) {
     adjust(L, { happiness: -3 });
     return out(L, "Dating", "I went looking for love, but struck out.");
   }
-  const p = makePerson("partner", Math.max(16, L.age + rnd(-5, 5)), { gender: preferredGender(L), bond: rnd(50, 80) });
+  const p = makePerson("partner", datingAge(L, 5), { gender: preferredGender(L), bond: rnd(50, 80) });
   p.lastContact = L.age;
   L.relationships.push(p);
   bump(L, "partners");
@@ -552,14 +552,16 @@ function hookUp(L) {
 function relationshipActions(L, p) {
   if (!p.isAlive || inPrison(L)) return [];
   if (p.kind === "pet") return ["play", "walkPet"];
-  const list = ["spendTime", "conversation", "compliment"];
+  if (p.kind === "teacher") return ["askHelp", "suckUp", "disrespect"];
+  if (p.kind === "classmate") return extraRelActions(L, p).concat(["conversation", "compliment", "insult"], L.age >= 6 ? ["prank"] : []);
+  const list = ["spendTime", "conversation", "compliment"].concat(extraRelActions(L, p));
   if (L.age >= 10) list.push("gift");
   if (isParent(p.kind) || isRomantic(p.kind)) list.push("askForMoney");
   list.push("argue", "insult");
   if (L.age >= 6) list.push("prank");
   if (L.age >= 14) list.push("assault");
   if (L.age >= 16) list.push("murder");
-  if (p.kind === "partner") { if (L.age >= 18) list.push("propose"); list.push("breakUp"); if (L.age >= 18) list.push("haveBaby"); }
+  if (p.kind === "partner") { if (L.age >= 18 && p.age >= 18) list.push("propose"); list.push("breakUp"); if (L.age >= 18 && p.age >= 18) list.push("haveBaby"); }
   if (p.kind === "fiance") list.push("marry", "haveBaby", "breakUp");
   if (p.kind === "spouse") list.push("haveBaby", "breakUp");
   return list;
@@ -573,6 +575,9 @@ function performRelAction(L, action, id) {
   const upd = (fn) => updateRel(L, id, fn);
   let m;
   touch(L, id);
+  if (EXTRA_REL[action]) return performExtraRelAction(L, action, p);
+  const rejection = rejectionText(L, p, action);
+  if (rejection) return out(L, relName(p), remember(L, p, rejection));
   switch (action) {
     case "spendTime": upd((x) => { x.bond += rnd(3, 10); }); adjust(L, { happiness: 4 }); m = `I spent quality time with my ${relTitle(p).toLowerCase()} ${name}.`; break;
     case "conversation":
@@ -613,7 +618,7 @@ function performRelAction(L, action, id) {
       }
       break;
     case "breakUp":
-      L.relationships = L.relationships.filter((x) => x.id !== id);
+      becomeEx(L, p);
       adjust(L, { happiness: -10 });
       if (p.kind === "spouse") { const s = Math.max(0, idiv(L.money, 2)); L.money -= s; m = `I divorced ${name}. The settlement cost me ${formatMoney(s)}.`; }
       else m = `I broke up with ${name}.`;
@@ -653,7 +658,7 @@ function performRelAction(L, action, id) {
       }
       break;
   }
-  return out(L, relName(p), m);
+  return out(L, relName(p), remember(L, p, m));
 }
 
 // MARK: Assets

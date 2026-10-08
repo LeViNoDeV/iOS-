@@ -132,7 +132,7 @@ function choiceEvent(L) {
     events.push(ev("drunkDriving", {}, "One Too Many", "You had a few drinks at a friend's party and your car is parked outside.", ["Drive home", "Call a cab"]));
   }
   if (age >= 16 && age <= 60 && !romanticPartner(L)) {
-    const person = makePerson("partner", Math.max(16, age + rnd(-4, 4)), { gender: preferredGender(L), bond: rnd(50, 80) });
+    const person = makePerson("partner", datingAge(L), { gender: preferredGender(L), bond: rnd(50, 80) });
     person.money = rnd(0, 150000);
     events.push(ev("askedOut", { person }, "Love is in the air", `${relName(person)} (${person.age}) asked you out on a date. Looks: ${person.looks}%.`, ["Say yes", "Say no"]));
   }
@@ -346,8 +346,9 @@ function outcomeText(L, event, c) {
         if (roll(0.5)) { updateRel(L, p.id, (x) => { x.bond += 15; }); return `I confronted ${p.firstName}. ${cap(pronoun(p.gender).subject)} begged for forgiveness and promised to change.`; }
         updateRel(L, p.id, (x) => { x.bond -= 20; }); return `I confronted ${p.firstName} and it turned into a screaming match.`;
       }
-      L.relationships = L.relationships.filter((x) => x.id !== p.id);
-      if (p.kind === "spouse") {
+      const wasSpouse = p.kind === "spouse";
+      becomeEx(L, p);
+      if (wasSpouse) {
         const settlement = Math.max(0, idiv(L.money, 3)); L.money -= settlement;
         return `💔 I divorced ${p.firstName} for cheating. The settlement cost me ${formatMoney(settlement)}.`;
       }

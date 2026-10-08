@@ -229,6 +229,9 @@ function relTitle(p) {
     case "mother": return "Mother";
     case "father": return "Father";
     case "friend": return "Friend";
+    case "classmate": return "Classmate";
+    case "teacher": return "Teacher";
+    case "ex": return m ? "Ex-boyfriend" : "Ex-girlfriend";
   }
   return p.kind;
 }
@@ -434,9 +437,11 @@ function mustChooseTrack(L) {
 function socialSupport(L) {
   let total = 0, weight = 0;
   for (const p of L.relationships) {
-    if (!p.isAlive) continue;
+    if (!p.isAlive || p.kind === "ex") continue;
     let w = 1;
-    if (isRomantic(p.kind)) w = 3;
+    if (p.kind === "classmate") w = 0.3;
+    else if (p.kind === "teacher") w = 0.2;
+    else if (isRomantic(p.kind)) w = 3;
     else if (isParent(p.kind)) w = L.age < 25 ? 2 : 1;
     else if (p.kind === "child") w = 1.5;
     else if (p.kind === "sibling") w = 0.75;
@@ -482,6 +487,7 @@ function ageUp(L) {
   progressAssets(L);
   progressRelationships(L);
   progressSocial(L);
+  progressPeople(L);
   if (!inPrison(L)) generateEvents(L);
   checkForDeath(L);
 }
@@ -747,8 +753,9 @@ function progressRelationships(L) {
       continue;
     }
     if (isRomantic(p.kind) && p.bond < 15 && roll(0.4)) {
-      L.relationships = L.relationships.filter((x) => x.id !== p.id);
-      if (p.kind === "spouse") {
+      const wasSpouse = p.kind === "spouse";
+      becomeEx(L, p);
+      if (wasSpouse) {
         const settlement = Math.max(0, idiv(L.money, 2));
         L.money -= settlement;
         notify(L, "💔", "Divorced", `💔 ${p.firstName} divorced me and took ${formatMoney(settlement)} in the settlement.`);

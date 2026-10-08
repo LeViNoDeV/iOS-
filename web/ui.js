@@ -2,7 +2,7 @@
 "use strict";
 
 const SAVE_KEY = "lifesim-save-v1";
-const store = { life: null, graveyard: [], settings: { mature: false } };
+const store = { life: null, graveyard: [], settings: { mature: true } };
 const ui = {
   tab: "career", stack: [], outcome: null, choice: null, openings: null, bet: 1000,
   form: { first: "", last: "", gender: "male" }, lastAgeShown: -1,
@@ -21,7 +21,7 @@ function load() {
     const data = JSON.parse(raw);
     store.life = data.life || null;
     store.graveyard = data.graveyard || [];
-    store.settings = { mature: false, ...(data.settings || {}) };
+    store.settings = { mature: true, ...(data.settings || {}) };
   } catch (e) { /* ignore a corrupt or blocked save */ }
 }
 
@@ -154,6 +154,7 @@ function renderStart() {
     : "";
   return `<div class="center-wrap"><div class="card">
     <div class="brand"><h1>LifeSim</h1><p>Live a whole life, one year at a time.</p></div>
+    ${store.settings.mature ? `<p class="muted" style="margin:0;font-size:13px">🔞 For players 18+. Mature Mode is on: adult characters can drink, do drugs and have (non-explicit) sex. You can turn it off under Settings below.</p>` : ""}
     <button class="age-btn big-go" data-h="${h(() => startLife())}">🎲 Start a random life</button>
     <div class="sec"><div class="sec-title"><span>Or make your own</span></div>
       <div class="fields">
@@ -473,6 +474,8 @@ function renderPeople(L) {
     ["Love", (p) => isRomantic(p.kind)],
     ["Children", (p) => p.kind === "child"],
     ["Friends", (p) => p.kind === "friend"],
+    ["School", (p) => p.kind === "classmate" || p.kind === "teacher"],
+    ["Exes", (p) => p.kind === "ex"],
     ["Pets", (p) => p.kind === "pet"],
   ];
   for (const [title, test] of groups) {
@@ -513,6 +516,9 @@ function renderPerson(L, view) {
     if (ys != null) about += lv("Last talked", ys <= 0 ? "This year" : `${plural(ys, "year")} ago`, ys >= 2 ? "red" : "");
     html += section(`About ${p.firstName}`, about);
   }
+  if (p.history && p.history.length) {
+    html += section("Memories", p.history.slice().reverse().map((h) => `<div class="lv"><span>Age ${h.age}</span><span style="font-weight:400;text-align:left;flex:1;margin-left:12px">${esc(h.text)}</span></div>`).join(""));
+  }
   const actions = relationshipActions(L, p);
   if (actions.length) {
     html += section("Interact", actions.map((a) => {
@@ -522,7 +528,7 @@ function renderPerson(L, view) {
           a === "murder" ? "This can't be undone, and you may spend decades in prison." : null,
           [{ label: RelActions[a], danger: true, fn: run }, { label: "Cancel", secondary: true, fn: () => {} }])
         : run;
-      return row("", RelActions[a], null, fn, { danger: hostileActions.has(a) });
+      return row("", RelActions[a] || EXTRA_REL[a], null, fn, { danger: hostileActions.has(a) || a === "disrespect" });
     }).join("").replaceAll('<span class="row-emoji"></span>', ""));
   } else if (p.isAlive && inPrison(L)) {
     html += `<div class="muted pad">You can't visit anyone while you're in prison.</div>`;
@@ -534,6 +540,9 @@ function renderPerson(L, view) {
 
 function renderActivities(L) {
   let html = "";
+  if (L.age < 13) {
+    html += section("Kid stuff", KidActivities.filter((a) => L.age >= a.min).map((a) => row(a.emoji, a.title, a.sub, () => act((x) => doKidActivity(x, a.id)))).join("") || `<div class="pad muted">You're a baby. Enjoy it!</div>`);
+  }
   for (const [title, ids] of ActivityGroups.slice(0, 1)) html += activitySection(L, title, ids);
 
   let health = Treatments.map((t) => {
