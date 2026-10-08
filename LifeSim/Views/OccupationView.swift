@@ -123,20 +123,53 @@ struct OccupationView: View {
                 StatBar(label: "Performance", emoji: "📊", value: job.performance)
             }
 
-            if let template = life.jobTemplate, template.ladder.count > 1 {
+            if let template = life.jobTemplate, template.hasCareerPath {
                 Section("Career Ladder") {
-                    ForEach(Array(template.ladder.enumerated()), id: \.offset) { index, rung in
+                    ForEach(Array(life.currentLadder.enumerated()), id: \.offset) { index, rung in
                         HStack {
                             Text(index < job.level ? "✅" : (index == job.level ? "📍" : "🔒"))
                             Text(rung)
                                 .fontWeight(index == job.level ? .bold : .regular)
                                 .foregroundStyle(index > job.level ? Color.secondary : Color.primary)
                             Spacer()
-                            Text(formatMoney(template.salary(atLevel: index, base: job.baseSalary)))
+                            Text(formatMoney(life.jobSalary(atLevel: index)))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    if let branch = template.branch, job.track == nil {
+                        HStack {
+                            Text("🔀")
+                            Text("Then: " + branch.tracks.map(\.name).joined(separator: ", "))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            if life.mustChooseTrack, let branch = life.jobTemplate?.branch {
+                Section {
+                    ForEach(branch.tracks) { track in
+                        let eligible = life.meets(track)
+                        Button { store.run { $0.choose(track) } } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                Text(track.emoji).font(.title)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(track.name).font(.headline)
+                                    Text(track.blurb).font(.caption).foregroundStyle(.secondary)
+                                    Text("\(track.requirementText) · Starts as \(track.titles[0])")
+                                        .font(.caption2)
+                                        .foregroundStyle(eligible ? Color.secondary : Color.red)
+                                }
+                            }
+                            .opacity(eligible ? 1 : 0.5)
+                        }
+                        .foregroundStyle(.primary)
+                    }
+                } header: {
+                    Text("Choose Your Path")
+                } footer: {
+                    Text("Needs a year in your current role and decent performance. Specialist units are selective — you may need to apply more than once.")
                 }
             }
 
@@ -148,9 +181,9 @@ struct OccupationView: View {
                     }
                     .disabled(used)
                 }
-                if let template = life.jobTemplate, job.level < template.ladder.count - 1 {
+                if !life.mustChooseTrack && job.level < life.currentLadder.count - 1 {
                     Button { store.run { $0.askForPromotion() } } label: {
-                        ActionRow(emoji: "🪜", title: "Ask for a Promotion", subtitle: "Next: \(template.ladder[job.level + 1])")
+                        ActionRow(emoji: "🪜", title: "Ask for a Promotion", subtitle: "Next: \(life.currentLadder[job.level + 1])")
                     }
                 }
                 Button { store.run { $0.askForRaise() } } label: {
@@ -215,7 +248,7 @@ struct OccupationView: View {
                             Text(opening.company)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            if opening.template.ladder.count > 1 {
+                            if opening.template.hasCareerPath {
                                 Text("Career path up to \(opening.template.topTitle)")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)

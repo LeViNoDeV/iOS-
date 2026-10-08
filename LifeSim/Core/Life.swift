@@ -216,7 +216,7 @@ struct Life: Codable, Identifiable {
         if let current = job, let template = jobCatalog.first(where: { $0.id == current.templateID }), template.famous {
             let gain = (current.performance - 40) / 6 + Int.random(in: -3...6)
             fame = (fame + gain).clamped(to: 0...100)
-            job?.salary = template.salary(atLevel: current.level, base: current.baseSalary) + fame * fame * 250
+            job?.salary = jobSalary(atLevel: current.level) + fame * fame * 250
             if fame >= 50 && roll(0.2) {
                 record("⭐ Paparazzi followed me around all week. I'm famous!")
             }
@@ -313,7 +313,10 @@ struct Life: Codable, Identifiable {
             adjust(happiness: -15)
             return
         }
-        let ladderTop = (jobTemplate?.ladder.count ?? 1) - 1
+        let ladderTop = currentLadder.count - 1
+        if mustChooseTrack && current.yearsInLevel == 1 && current.performance >= 50 {
+            record("🔀 I've earned the right to specialize. Time to choose my path at work.")
+        }
         if current.performance > 75 && current.yearsInLevel >= 2 && current.level < ladderTop && roll(0.3) {
             job = current
             promote()

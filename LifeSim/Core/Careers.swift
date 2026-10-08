@@ -14,7 +14,8 @@ let careerLadders: [String: [String]] = [
     "construction": ["Laborer", "Carpenter", "Foreman", "Site Manager"],
     "trucker": ["Truck Driver", "Senior Driver", "Fleet Manager"],
     "receptionist": ["Receptionist", "Office Coordinator", "Office Manager"],
-    "police": ["Police Cadet", "Police Officer", "Detective", "Sergeant", "Lieutenant", "Captain", "Police Chief"],
+    // Police branches into Patrol, Detective or SWAT after Police Officer (see `careerBranches`).
+    "police": ["Police Cadet", "Police Officer"],
     "firefighter": ["Firefighter Recruit", "Firefighter", "Engineer", "Fire Lieutenant", "Fire Captain", "Fire Chief"],
     "model": ["Catalog Model", "Runway Model", "Fashion Model", "Supermodel"],
     "teacher": ["Substitute Teacher", "Teacher", "Department Head", "Vice Principal", "Principal"],
@@ -36,10 +37,71 @@ let careerLadders: [String: [String]] = [
     "athlete": ["Rookie", "Starter", "Team Captain", "All-Star", "MVP"],
 ]
 
+// MARK: - Career branches
+
+/// A specialization a career can split into, with its own ranks.
+struct CareerTrack: Identifiable {
+    let id: String
+    let name: String
+    let emoji: String
+    let blurb: String
+    let titles: [String]
+    var minSmarts = 0
+    var minHealth = 0
+    var payMultiplier = 1.0
+    /// Chance of being accepted, before performance is factored in. 1 = guaranteed.
+    var selectivity = 1.0
+
+    var requirementText: String {
+        var parts: [String] = []
+        if minSmarts > 0 { parts.append("Smarts \(minSmarts)%+") }
+        if minHealth > 0 { parts.append("Health \(minHealth)%+") }
+        return parts.isEmpty ? "Open to everyone" : parts.joined(separator: " · ")
+    }
+}
+
+/// Where a career splits: after reaching `atLevel - 1` on the base ladder, you pick a track.
+struct CareerBranch {
+    let atLevel: Int
+    let tracks: [CareerTrack]
+}
+
+let careerBranches: [String: CareerBranch] = [
+    "police": CareerBranch(atLevel: 2, tracks: [
+        CareerTrack(id: "patrol", name: "Patrol", emoji: "🚓",
+                    blurb: "Stay on the streets and rise through the uniformed ranks to run the whole department.",
+                    titles: ["Patrol Sergeant", "Patrol Lieutenant", "Patrol Captain", "Deputy Chief", "Police Chief"]),
+        CareerTrack(id: "detective", name: "Detective", emoji: "🕵️",
+                    blurb: "Trade the uniform for a badge and solve murders, robberies and cold cases.",
+                    titles: ["Detective", "Senior Detective", "Detective Sergeant", "Detective Lieutenant", "Chief of Detectives"],
+                    minSmarts: 55, payMultiplier: 1.1, selectivity: 0.6),
+        CareerTrack(id: "swat", name: "SWAT", emoji: "🛡️",
+                    blurb: "Join the elite tactical unit for hostage rescues, raids and high-risk warrants.",
+                    titles: ["SWAT Operator", "SWAT Team Leader", "SWAT Sergeant", "SWAT Lieutenant", "SWAT Commander"],
+                    minHealth: 75, payMultiplier: 1.2, selectivity: 0.5),
+    ]),
+]
+
 extension JobTemplate {
+    /// The shared ladder before any branch.
     var ladder: [String] { careerLadders[id] ?? [title] }
+    var branch: CareerBranch? { careerBranches[id] }
     var entryTitle: String { ladder[0] }
-    var topTitle: String { ladder[ladder.count - 1] }
+    var topTitle: String {
+        if let branch = branch { return branch.tracks.compactMap { $0.titles.last }.joined(separator: " / ") }
+        return ladder[ladder.count - 1]
+    }
+    var hasCareerPath: Bool { ladder.count > 1 || branch != nil }
+
+    func track(_ id: String?) -> CareerTrack? {
+        guard let id = id else { return nil }
+        return branch?.tracks.first { $0.id == id }
+    }
+
+    /// Full ladder for someone on the given track (base ladder only if no track yet).
+    func ladder(track id: String?) -> [String] {
+        ladder + (track(id)?.titles ?? [])
+    }
 
     /// Salary for a given rung of the ladder.
     func salary(atLevel level: Int, base: Int? = nil) -> Int {
@@ -127,10 +189,26 @@ let jobActions: [String: [JobAction]] = [
         JobAction(id: "gossip", title: "Spread Office Gossip", emoji: "🗣️", successChance: 0.6, success: "Everyone comes to me for the latest gossip now.", failure: "My gossip got back to the person I was talking about.", performance: -2, happiness: 6, karma: -2, firedRisk: 0.15),
     ],
     "police": [
-        JobAction(id: "patrol", title: "Go on Patrol", emoji: "🚓", success: "I caught a car thief during my patrol.", failure: "A suspect got away from me.", performance: 10, karma: 2, injury: 5),
-        JobAction(id: "raid", title: "Lead a Drug Raid", emoji: "🚨", successChance: 0.6, success: "The raid was a success and made the evening news.", failure: "I was shot during the raid.", performance: 18, fame: 2, injury: 25, deathRisk: 0.08, deathCause: "a gunshot wound on duty", minLevel: 2),
+        JobAction(id: "beat", title: "Walk the Beat", emoji: "👮", successChance: 0.85, success: "I got to know the neighborhood and stopped a mugging.", failure: "A suspect got away from me.", performance: 8, karma: 2, injury: 4),
         JobAction(id: "bribe", title: "Take a Bribe", emoji: "💰", successChance: 0.6, success: "I let a dealer go in exchange for cash.", failure: "Internal Affairs caught me taking a bribe.", performance: 0, bonus: 2_000...15_000, karma: -10, prison: 2...8),
-        JobAction(id: "case", title: "Solve a Cold Case", emoji: "🔍", successChance: 0.45, success: "I cracked a 20-year-old murder case!", failure: "The trail went cold again.", performance: 20, fame: 3, karma: 4, minLevel: 2),
+    ],
+    "police.patrol": [
+        JobAction(id: "traffic", title: "Run Traffic Stops", emoji: "🚦", successChance: 0.85, success: "I wrote 40 tickets and caught a driver with a stolen car.", failure: "A driver I pulled over filed a complaint against me.", performance: 9),
+        JobAction(id: "chase", title: "High-Speed Chase", emoji: "🏎️", successChance: 0.6, success: "I chased down a getaway car and made the arrest!", failure: "I crashed my cruiser during the chase.", performance: 15, fame: 1, injury: 15, deathRisk: 0.04, deathCause: "a high-speed police chase"),
+        JobAction(id: "community", title: "Community Outreach", emoji: "🤝", successChance: 0.9, success: "I coached a youth basketball league. The neighborhood loves me.", failure: "Nobody showed up to my community meeting.", performance: 6, happiness: 5, karma: 4),
+    ],
+    "police.detective": [
+        JobAction(id: "case", title: "Investigate a Case", emoji: "🔍", successChance: 0.65, success: "I followed the evidence and arrested the killer.", failure: "My lead suspect had an airtight alibi.", performance: 12, karma: 2),
+        JobAction(id: "interrogate", title: "Interrogate a Suspect", emoji: "💡", successChance: 0.6, success: "I got a full confession in the interrogation room.", failure: "The suspect lawyered up and walked.", performance: 10),
+        JobAction(id: "undercover", title: "Go Undercover", emoji: "🥸", successChance: 0.5, success: "I infiltrated a crime ring and brought them all down!", failure: "My cover was blown and the gang beat me badly.", performance: 22, fame: 3, injury: 30, deathRisk: 0.08, deathCause: "being discovered while undercover"),
+        JobAction(id: "coldcase", title: "Crack a Cold Case", emoji: "🗄️", successChance: 0.35, success: "I solved a 20-year-old murder. It's all over the news!", failure: "The trail went cold again.", performance: 20, fame: 4, karma: 4, minLevel: 3),
+        JobAction(id: "plant", title: "Plant Evidence", emoji: "🧤", successChance: 0.55, success: "I planted evidence to close a case I couldn't crack.", failure: "A defense attorney proved I planted evidence.", performance: 12, karma: -12, prison: 3...10),
+    ],
+    "police.swat": [
+        JobAction(id: "breach", title: "Breach Training", emoji: "🧨", successChance: 0.85, success: "I led my squad through a flawless training breach.", failure: "A flashbang went off too close to me.", performance: 8, injury: 8),
+        JobAction(id: "raid", title: "Lead a Drug Raid", emoji: "🚨", successChance: 0.6, success: "The raid was a success and made the evening news.", failure: "I was shot during the raid.", performance: 18, fame: 2, injury: 25, deathRisk: 0.08, deathCause: "a gunshot wound on duty"),
+        JobAction(id: "hostage", title: "Rescue Hostages", emoji: "🛡️", successChance: 0.55, success: "I freed every hostage without a single casualty. I'm a hero!", failure: "The standoff went badly and I was wounded.", performance: 22, happiness: 8, fame: 4, karma: 5, injury: 30, deathRisk: 0.1, deathCause: "a hostage standoff"),
+        JobAction(id: "sniper", title: "Sniper Overwatch", emoji: "🎯", successChance: 0.7, success: "I neutralized an armed gunman from 400 yards.", failure: "I missed the shot and the suspect escaped.", performance: 14, karma: -1, minLevel: 3),
     ],
     "firefighter": [
         JobAction(id: "fire", title: "Fight a Fire", emoji: "🔥", successChance: 0.7, success: "I put out a blazing apartment fire.", failure: "I suffered smoke inhalation.", performance: 12, karma: 3, injury: 15, deathRisk: 0.04, deathCause: "a burning building collapsing"),
@@ -234,10 +312,64 @@ extension Life {
         return jobCatalog.first { $0.id == current.templateID }
     }
 
+    var jobTrack: CareerTrack? { jobTemplate?.track(job?.track) }
+
+    /// The ladder for the current job, including the chosen track.
+    var currentLadder: [String] {
+        guard let template = jobTemplate else { return [] }
+        return template.ladder(track: job?.track)
+    }
+
+    /// Salary for a level of the current job's ladder.
+    func jobSalary(atLevel level: Int) -> Int {
+        guard let current = job, let template = jobTemplate else { return 0 }
+        let pay = template.salary(atLevel: level, base: current.baseSalary)
+        return level >= (template.branch?.atLevel ?? Int.max) ? Int(Double(pay) * (jobTrack?.payMultiplier ?? 1)) : pay
+    }
+
+    /// True when the next step up requires picking a specialization.
+    var mustChooseTrack: Bool {
+        guard let current = job, let branch = jobTemplate?.branch else { return false }
+        return current.track == nil && current.level == branch.atLevel - 1
+    }
+
+    func meets(_ track: CareerTrack) -> Bool {
+        stats.smarts >= track.minSmarts && stats.health >= track.minHealth
+    }
+
+    mutating func choose(_ track: CareerTrack) -> Outcome {
+        guard var current = job, mustChooseTrack else {
+            return Outcome(title: track.name, message: "I can't switch tracks right now.")
+        }
+        guard current.yearsInLevel >= 1 && current.performance >= 50 else {
+            return Outcome(title: track.name, message: "I need at least a year on the job and solid performance before I can specialize.")
+        }
+        guard !current.usedActions.contains("track") else {
+            return Outcome(title: track.name, message: "I already applied for a new role this year.")
+        }
+        guard meets(track) else {
+            return Outcome(title: track.name, message: "I don't meet the requirements for \(track.name): \(track.requirementText).")
+        }
+        current.usedActions.append("track")
+        let chance = track.selectivity >= 1 ? 1 : track.selectivity + Double(current.performance - 50) / 150
+        guard roll(chance) else {
+            job = current
+            let message = "\(track.emoji) I applied to join \(track.name), but I wasn't selected. Maybe next year."
+            adjust(happiness: -6)
+            record(message)
+            return Outcome(title: track.name, message: message)
+        }
+        current.track = track.id
+        job = current
+        record("\(track.emoji) I chose the \(track.name) career path.")
+        return Outcome(title: track.name, message: promote())
+    }
+
     /// The actions available at the current job.
     var availableJobActions: [JobAction] {
         guard let current = job, let template = jobTemplate else { return [] }
-        let specific = (jobActions[template.id] ?? []).filter { $0.minLevel <= current.level }
+        let trackActions = current.track.flatMap { jobActions["\(template.id).\($0)"] } ?? []
+        let specific = ((jobActions[template.id] ?? []) + trackActions).filter { $0.minLevel <= current.level }
         return template.partTime ? specific + [commonJobActions[0]] : specific + commonJobActions
     }
 
@@ -299,7 +431,10 @@ extension Life {
         guard var current = job, let template = jobTemplate else {
             return Outcome(title: "Promotion", message: "I don't have a job.")
         }
-        guard current.level < template.ladder.count - 1 else {
+        if mustChooseTrack {
+            return Outcome(title: "Promotion", message: "To move up from \(current.title), I need to choose a specialization first.")
+        }
+        guard current.level < currentLadder.count - 1 else {
             return Outcome(title: "Promotion", message: "I'm already the \(current.title). There's nowhere left to climb!")
         }
         guard !current.usedActions.contains("promotion") else {
@@ -326,16 +461,17 @@ extension Life {
     /// Moves the current job up one rung and returns the log text.
     @discardableResult
     mutating func promote() -> String {
-        guard var current = job, let template = jobTemplate, current.level < template.ladder.count - 1 else { return "" }
+        let ladder = currentLadder
+        guard var current = job, current.level < ladder.count - 1 else { return "" }
         current.level += 1
         current.yearsInLevel = 0
-        current.title = template.ladder[current.level]
-        let newSalary = max(current.salary, template.salary(atLevel: current.level, base: current.baseSalary))
+        current.title = ladder[current.level]
+        let newSalary = max(current.salary, jobSalary(atLevel: current.level))
         current.salary = newSalary
         current.performance = max(50, current.performance - 15)
         job = current
         adjust(happiness: 12)
-        let crown = current.level == template.ladder.count - 1 ? " I've reached the top of my field! 👑" : ""
+        let crown = current.level == ladder.count - 1 ? " I've reached the top of my field! 👑" : ""
         let message = "📈 I was promoted to \(current.title)! My salary is now \(formatMoney(newSalary)).\(crown)"
         record(message)
         return message

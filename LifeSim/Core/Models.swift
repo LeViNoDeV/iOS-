@@ -232,6 +232,8 @@ struct Job: Codable, Equatable {
     var partTime: Bool
     var level = 0
     var yearsInLevel = 0
+    /// Chosen specialization for careers that branch (e.g. police SWAT).
+    var track: String?
     /// Job actions already used this year.
     var usedActions: [String] = []
 
@@ -256,6 +258,9 @@ struct Job: Codable, Equatable {
         partTime = try c.decodeIfPresent(Bool.self, forKey: .partTime) ?? false
         level = try c.decodeIfPresent(Int.self, forKey: .level) ?? 0
         yearsInLevel = try c.decodeIfPresent(Int.self, forKey: .yearsInLevel) ?? 0
+        track = try c.decodeIfPresent(String.self, forKey: .track)
+        // Saves from before police branching: senior officers become Patrol.
+        if templateID == "police" && track == nil && level >= 2 { track = "patrol" }
         usedActions = try c.decodeIfPresent([String].self, forKey: .usedActions) ?? []
     }
 }
