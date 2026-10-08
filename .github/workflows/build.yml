@@ -16,11 +16,15 @@ jobs:
 
       - name: Build unsigned app
         run: |
-          xcodebuild -project LifeSim.xcodeproj -target LifeSim \
+          if ! xcodebuild -project LifeSim.xcodeproj -target LifeSim \
             -sdk iphoneos -configuration Release \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tee build.log | grep -E "error:|warning: unre|BUILD (SUCCEEDED|FAILED)" || true
-          test "${PIPESTATUS[0]}" -eq 0
+            build > build.log 2>&1; then
+            grep -E "error:" build.log | sort -u
+            tail -40 build.log
+            exit 1
+          fi
+          grep -E "BUILD SUCCEEDED" build.log
 
       - name: Package .ipa
         run: |
