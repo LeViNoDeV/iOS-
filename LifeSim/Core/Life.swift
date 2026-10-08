@@ -216,7 +216,8 @@ struct Life: Codable, Identifiable {
         if let current = job, let template = jobCatalog.first(where: { $0.id == current.templateID }), template.famous {
             let gain = (current.performance - 40) / 6 + Int.random(in: -3...6)
             fame = (fame + gain).clamped(to: 0...100)
-            job?.salary = jobSalary(atLevel: current.level) + fame * fame * 250
+            let salary = jobSalary(atLevel: current.level) + fame * fame * 250
+            job?.salary = salary
             if fame >= 50 && roll(0.2) {
                 record("⭐ Paparazzi followed me around all week. I'm famous!")
             }

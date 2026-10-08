@@ -428,7 +428,7 @@ extension Life {
 
     /// Asks the boss to move up a rung.
     mutating func askForPromotion() -> Outcome {
-        guard var current = job, let template = jobTemplate else {
+        guard var current = job else {
             return Outcome(title: "Promotion", message: "I don't have a job.")
         }
         if mustChooseTrack {
