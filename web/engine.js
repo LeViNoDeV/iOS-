@@ -69,10 +69,10 @@ const Illnesses = {
   backPain: { name: "Back Pain", damage: 4, cure: 0.7 },
   depression: { name: "Depression", damage: 2, cure: 0.4 },
   insomnia: { name: "Insomnia", damage: 2, cure: 0.7 },
-  pneumonia: { name: "Pneumonia", damage: 8, cure: 0.7 },
-  diabetes: { name: "Diabetes", damage: 8, cure: 0.25 },
-  heartDisease: { name: "Heart Disease", damage: 12, cure: 0.35 },
-  cancer: { name: "Cancer", damage: 18, cure: 0.3 },
+  pneumonia: { name: "Pneumonia", damage: 6, cure: 0.75 },
+  diabetes: { name: "Diabetes", damage: 4, cure: 0.35 },
+  heartDisease: { name: "Heart Disease", damage: 7, cure: 0.45 },
+  cancer: { name: "Cancer", damage: 10, cure: 0.4 },
   std: { name: "an STD", damage: 4, cure: 0.7 },
   brokenArm: { name: "a Broken Arm", damage: 2, cure: 0.9 },
 };
@@ -486,10 +486,40 @@ function ageUp(L) {
   checkForDeath(L);
 }
 
+// MARK: Aging & mortality
+// Death risk grows with age but is scaled by health, so looking after yourself
+// (gym, doctor, diet, a happy life) really pays off. Nobody lives past AGING.maxAge.
+const AGING = {
+  hazardStart: 71, hazardSlope: 0.003,
+  lateStart: 90, lateSlope: 0.02,
+  extremeStart: 108, extremeSlope: 0.05,
+  maxAge: 120,
+  oldDecline: 2,
+  topHealthFactor: 0.5,
+};
+
+function ageHazard(age) {
+  let p = 0;
+  if (age > AGING.hazardStart) p += (age - AGING.hazardStart) * AGING.hazardSlope;
+  if (age > AGING.lateStart) p += (age - AGING.lateStart) * AGING.lateSlope;
+  if (age > AGING.extremeStart) p += (age - AGING.extremeStart) * AGING.extremeSlope;
+  return p;
+}
+
+function healthFactor(health) {
+  if (health >= 85) return AGING.topHealthFactor;
+  if (health >= 70) return 0.6;
+  if (health >= 50) return 1;
+  if (health >= 30) return 1.8;
+  if (health >= 15) return 3;
+  return 5;
+}
+
 function ageStats(L) {
   let health = rnd(-2, 2);
-  if (L.age > 45) health -= rnd(0, 3);
-  if (L.age > 70) health -= rnd(1, 4);
+  if (L.age > 55) health -= rnd(0, 2);
+  if (L.age > 75) health -= rnd(0, AGING.oldDecline);
+  if (L.age > 95) health -= rnd(1, 3);
   let looks = rnd(-2, 2);
   if (L.age > 35) looks -= rnd(0, 2);
   if (L.age >= 13 && L.age <= 16) looks += rnd(-6, 6);
@@ -675,10 +705,8 @@ function progressAssets(L) {
 
 function personDies(age, isPet) {
   if (isPet) return age > 8 && roll((age - 8) * 0.08);
-  let p = 0.0005;
-  if (age > 60) p += (age - 60) * 0.008;
-  if (age > 85) p += (age - 85) * 0.04;
-  return roll(p);
+  if (age >= AGING.maxAge) return true;
+  return roll(0.0004 + ageHazard(age) * 1.1);
 }
 
 function progressRelationships(L) {
@@ -803,11 +831,8 @@ function progressSocial(L) {
 
 function checkForDeath(L) {
   if (!L.isAlive) return;
-  let p = 0.0003;
-  if (L.age > 60) p += (L.age - 60) * 0.006;
-  if (L.age > 85) p += (L.age - 85) * 0.035;
-  if (L.stats.health < 25) p += (25 - L.stats.health) * 0.015;
-  if (L.stats.health === 0 || roll(p)) {
+  const p = (0.0003 + ageHazard(L.age)) * healthFactor(L.stats.health);
+  if (L.stats.health === 0 || L.age >= AGING.maxAge || roll(p)) {
     let cause;
     if (L.stats.health < 20) cause = pick(["heart failure", "cancer", "pneumonia", "a stroke", "organ failure"]);
     else if (L.age > 75) cause = pick(["old age", "old age", "a heart attack", "a stroke"]);
