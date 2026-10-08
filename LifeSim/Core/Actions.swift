@@ -324,7 +324,8 @@ extension Life {
 
     mutating func studyHarder() -> Outcome {
         if enrollment != nil {
-            enrollment?.grades = min(100, (enrollment?.grades ?? 50) + .random(in: 3...8))
+            let grades = enrollment?.grades ?? 50
+            enrollment?.grades = min(100, grades + .random(in: 3...8))
         } else {
             schoolGrades = min(100, schoolGrades + .random(in: 3...8))
         }
@@ -435,7 +436,8 @@ extension Life {
     }
 
     mutating func workHarder() -> Outcome {
-        job?.performance = min(100, (job?.performance ?? 50) + .random(in: 4...10))
+        let performance = job?.performance ?? 50
+        job?.performance = min(100, performance + .random(in: 4...10))
         adjust(happiness: -2, health: -1)
         let message = "I worked extra hard at my job."
         record(message)
