@@ -360,7 +360,7 @@ struct Life: Codable, Identifiable {
             switch assets[index].kind {
             case .house:
                 assets[index].value = Int(Double(assets[index].value) * Double.random(in: 0.97...1.08))
-            case .car:
+            case .car, .boat:
                 assets[index].value = Int(Double(assets[index].value) * Double.random(in: 0.82...0.92))
             }
         }
