@@ -2,7 +2,18 @@
 
 A BitLife-style life simulator for iOS, written in SwiftUI. You're born with random stats, family, and hometown, then tap **Age +** to live year by year: go to school, get a job, fall in love, buy a house, commit crimes, and eventually die.
 
-## Requirements
+## Play on a PC (web version)
+
+The `web/` folder has the same game as a website that runs in any modern browser (Chrome, Edge, Firefox, Safari).
+
+1. Download the repo (**Code → Download ZIP** on GitHub) and unzip it.
+2. Open `web/index.html` in your browser by double-clicking it.
+
+No install or internet connection is needed. Fonts load from Google Fonts when you're online. Your game saves automatically in the browser. Press **Space** to age up.
+
+The web code mirrors the iOS app's game logic: `engine.js` (aging, health, money, relationships), `events.js` (random events), `actions.js` (everything you can do) and `game-data.js` (jobs, career ladders and work actions, generated from the Swift data). `ui.js` and `style.css` are the interface.
+
+## Requirements (iOS app)
 
 - Xcode 16 or later
 - iOS 17 or later (iPhone)
@@ -40,6 +51,7 @@ LifeSim/
   App/      App entry point and GameStore (state + persistence)
   Core/     Pure game logic (no UI): models, the Life engine, random events, actions
   Views/    SwiftUI screens
+web/        The same game as a website for PC
 ```
 
 The `Core` folder only imports Foundation, so you can tune or test the game rules without touching the UI.
