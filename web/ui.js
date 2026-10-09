@@ -71,7 +71,9 @@ function act(fn) {
   const L = store.life;
   if (!L || !L.isAlive) return;
   const before = snap(L);
+  const ids = relIds(L);
   const result = fn(L);
+  queueNewNames(L, ids);
   if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
   if (result) ui.outcome = { ...result, deltas: deltasBetween(before, snap(L)), dead: !L.isAlive };
   save();
@@ -80,9 +82,11 @@ function act(fn) {
 
 function ageUpNow() {
   const L = store.life;
-  if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || ui.outcome || ui.choice) return;
+  if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || (L.toName || []).length || ui.outcome || ui.choice) return;
   pushSnapshot(L);
+  const ids = relIds(L);
   ageUp(L);
+  queueNewNames(L, ids);
   if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
   ui.openings = null;
   save();
@@ -167,6 +171,7 @@ function renderStart() {
     <div class="brand"><h1>LifeSim</h1><p>Live a whole life, one year at a time.</p></div>
     ${store.settings.mature ? `<p class="muted" style="margin:0;font-size:13px">🔞 For players 18+. Mature Mode is on: adult characters can drink, do drugs and have (non-explicit) sex. You can turn it off under Settings below.</p>` : ""}
     <button class="age-btn big-go" data-h="${h(() => startLife())}">🎲 Start a random life</button>
+    <button class="btn" data-h="${h(chooseRoyalStart)}">👑 Be born royal</button>
     <div class="sec"><div class="sec-title"><span>Or make your own</span></div>
       <div class="fields">
         <div class="field"><label for="f-first">First name</label><input id="f-first" value="${esc(f.first)}" placeholder="Random" autocomplete="off"></div>
@@ -218,6 +223,7 @@ function renderDeath(L) {
 
 function subtitleOf(L) {
   if (inPrison(L)) return `Inmate · ${plural(L.prisonYearsLeft, "year")} left`;
+  if (L.royal && !L.royal.renounced) return `${royalTitle(L)} of ${L.royal.country}`;
   if (L.job) return `${L.job.title} at ${L.job.company}`;
   const s = schoolName(L);
   if (s) return `Student · ${s}`;
@@ -239,7 +245,7 @@ function renderGame(L) {
   if (L.pregnancy) chips.push(`<span class="chip warn">🤰 ${L.pregnancy.carrier === "me" ? "Pregnant" : `${esc(L.pregnancy.partnerName)} is pregnant`} · due next year</span>`);
 
   const blocked = L.pendingEvents.length > 0 || (L.popups || []).length > 0;
-  const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["profile", "🪪", "Profile"], ["god", "⚡", "God"]];
+  const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["packs", "🎁", "Packs"], ["profile", "🪪", "Profile"], ["god", "⚡", "God"]];
 
   return `<div class="game">
     <aside class="pane me" aria-label="You">
@@ -284,6 +290,7 @@ function renderSide(L) {
     case "activities": return inPrison(L) ? renderPrison(L) : renderActivities(L);
     case "profile": return renderProfile(L);
     case "god": return renderGodMode(L);
+    case "packs": return renderPacks(L);
   }
   return "";
 }
@@ -394,6 +401,7 @@ function renderCareer(L) {
 
 function renderPrison(L) {
   let html = section(`Prison · ${plural(L.prisonYearsLeft, "year")} left`, PrisonActions.map((a) => row(a.emoji, a.title, null, () => act((x) => prisonAction(x, a.id)))).join(""));
+  html += renderPrisonPack(L);
   if (L.criminalRecord.length) html += section("Criminal record", L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   return html;
 }
@@ -534,9 +542,11 @@ function renderPerson(L, view) {
     html += section("Memories", p.history.slice().reverse().map((h) => `<div class="lv"><span>Age ${h.age}</span><span style="font-weight:400;text-align:left;flex:1;margin-left:12px">${esc(h.text)}</span></div>`).join(""));
   }
   const actions = relationshipActions(L, p);
+  if (p.isAlive && p.kind === "child" && !inPrison(L)) actions.push("rename");
   if (actions.length) {
     html += section("Interact", actions.map((a) => {
       let run = () => act((x) => performRelAction(x, a, p.id));
+      if (a === "rename") run = () => { requestName(L, "rel", p.id); save(); render(); };
       if (a === "haveSex") run = () => askProtection(`Have sex with ${p.firstName}?`, (safe) => act((x) => haveSex(x, p.id, safe)));
       if (a === "hookUpWith") run = () => askProtection(`Hook up with ${p.firstName}?`, (safe) => act((x) => hookUpWithPerson(x, p.id, safe)));
       const fn = a === "murder" || a === "breakUp"
@@ -544,7 +554,7 @@ function renderPerson(L, view) {
           a === "murder" ? "This can't be undone, and you may spend decades in prison." : null,
           [{ label: RelActions[a], danger: true, fn: run }, { label: "Cancel", secondary: true, fn: () => {} }])
         : run;
-      return row("", RelActions[a] || EXTRA_REL[a], null, fn, { danger: hostileActions.has(a) || a === "disrespect" });
+      return row("", RelActions[a] || EXTRA_REL[a] || PetExtraActions[a], null, fn, { danger: hostileActions.has(a) || a === "disrespect" });
     }).join("").replaceAll('<span class="row-emoji"></span>', ""));
   } else if (p.isAlive && inPrison(L)) {
     html += `<div class="muted pad">You can't visit anyone while you're in prison.</div>`;
@@ -581,7 +591,7 @@ function renderActivities(L) {
 
   let more = row("🎰", "Casino", L.age >= 18 ? "Blackjack, roulette, slots & horses" : "Available at 18", () => push({ type: "casino" }), { disabled: L.age < 18, chev: true });
   if (canTakeDrivingTest(L)) more += row("🚦", "Driving test", "Get your license", () => act(takeDrivingTest));
-  more += row("✈️", "Emigrate", L.age >= 18 ? "Move to a new country · $5,000" : "Available at 18", () => push({ type: "emigrate" }), { disabled: L.age < 18, chev: true });
+  more += row("✈️", "Emigrate", L.age >= 18 ? `${WORLD.length} countries · from $2,000` : "Available at 18", () => { ui.emigrateCountry = null; push({ type: "emigrate" }); }, { disabled: L.age < 18, chev: true });
   html += section("More", more);
 
   html += section("Crime", Crimes.map((c) => {
@@ -608,10 +618,7 @@ function renderCasino(L) {
 }
 
 function renderEmigrate(L) {
-  return section("Emigrate · $5,000", Names.places.map((pl) => {
-    const home = L.city === pl[0];
-    return row("📍", pl[0], home ? "You live here" : pl[1], () => { ui.stack.pop(); act((x) => emigrate(x, pl)); }, { disabled: home });
-  }).join(""));
+  return renderWorldPicker(L);
 }
 
 // MARK: Profile tab
@@ -643,6 +650,7 @@ function renderSubview(L, view) {
     case "casino": return renderCasino(L);
     case "emigrate": return renderEmigrate(L);
     case "godPerson": return renderGodPerson(L, view);
+    case "business": return renderBusiness(L, view);
   }
   return "";
 }
@@ -669,7 +677,9 @@ function renderModals(L) {
       emoji: e.emoji, tag: `Age ${L.age}${left ? ` · ${left} more` : ""}`, title: e.title, body: e.message,
       buttons: e.options.map((o, i) => `<button class="choice" data-h="${h(() => {
         const before = snap(L);
+        const ids = relIds(L);
         const r = resolveEvent(L, e, i);
+        queueNewNames(L, ids);
         if (!L.isAlive) store.graveyard.unshift(summaryOf(L));
         ui.outcome = { ...r, emoji: e.emoji, deltas: deltasBetween(before, snap(L)), dead: !L.isAlive };
         save();
@@ -677,7 +687,12 @@ function renderModals(L) {
       })}">${esc(o)}</button>`).join(""),
     });
   }
-  // 2. The result of the last choice or action.
+  // 2. Naming new babies, pets and businesses.
+  if (L && L.isAlive && (L.toName || []).length) {
+    const naming = renderNamingModal(L);
+    if (naming) return naming;
+  }
+  // 3. The result of the last choice or action.
   if (ui.outcome) {
     const o = ui.outcome;
     const close = h(() => { ui.outcome = null; render(); });
@@ -718,7 +733,9 @@ function onClick(e) {
 }
 
 function onKey(e) {
+  if (e.key === "Enter" && e.target.id === "name-input") { e.preventDefault(); document.querySelector("[data-name-ok]")?.click(); return; }
   if (e.target.closest("input, textarea, select")) return;
+  if (store.life?.toName?.length) return;
   if (e.key === " " || e.key === "Spacebar") {
     if (ui.outcome) { e.preventDefault(); ui.outcome = null; render(); return; }
     if (store.life?.popups?.length && !store.life.pendingEvents.length) { e.preventDefault(); store.life.popups.shift(); save(); render(); return; }
@@ -737,6 +754,7 @@ function start(data) {
   document.addEventListener("keydown", onKey);
   document.addEventListener("input", onGodInput);
   document.addEventListener("change", onGodChange);
+  document.addEventListener("input", onWorldSearch);
   render(true);
 }
 

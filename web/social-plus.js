@@ -267,6 +267,9 @@ function progressPeople(L) {
     remember(L, p, text);
   }
 
+  progressPacks(L);
+  if (!L.isAlive) return;
+
   // Birthdays: people who love you remember.
   const close = L.relationships.filter((p) => p.isAlive && !p.species && p.bond >= 75 && p.kind !== "classmate" && p.kind !== "teacher" && p.kind !== "ex");
   if (close.length && roll(0.5)) {

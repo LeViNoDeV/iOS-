@@ -555,7 +555,7 @@ function hookUp(L) {
 
 function relationshipActions(L, p) {
   if (!p.isAlive || inPrison(L)) return [];
-  if (p.kind === "pet") return ["play", "walkPet"];
+  if (p.kind === "pet") return ["play", "walkPet", ...Object.keys(PetExtraActions)];
   if (p.kind === "teacher") return ["askHelp", "suckUp", "disrespect"];
   if (p.kind === "classmate") return extraRelActions(L, p).concat(["conversation", "compliment", "insult"], L.age >= 6 ? ["prank"] : []);
   const list = ["spendTime", "conversation", "compliment"].concat(extraRelActions(L, p));
@@ -583,6 +583,8 @@ function performRelAction(L, action, id) {
   let m;
   touch(L, id);
   if (action === "haveSex") return haveSex(L, id, true);
+  if (action === "rename") { requestName(L, "rel", id); return out(L, relName(p), `I decided to give ${name} a new name.`, false); }
+  if (PetExtraActions[action]) return petAction(L, id, action);
   if (EXTRA_REL[action]) return performExtraRelAction(L, action, p);
   const rejection = rejectionText(L, p, action);
   if (rejection) return out(L, relName(p), remember(L, p, rejection));
