@@ -321,6 +321,9 @@ function renderGame(L) {
     { label: "Keep playing", secondary: true, fn: () => {} },
   ]);
   const log = L.log.slice(-60);
+  const feedHtml = log.map((y, i) => `<div class="year${i === log.length - 1 ? " latest" : ""}"><div class="year-age">Age ${y.age}</div>
+      <div>${y.entries.length ? y.entries.map((e) => `<p>${esc(e)}</p>`).join("") : `<p class="quiet">Nothing much happened.</p>`}</div></div>`).join("");
+  if (mode === "desktop") return renderDesktop(L, { chips, blocked, feedHtml, newLife });
   const phone = `<div class="phone">
     <header class="topbar">
       <button class="top-avatar" aria-label="Your profile" data-h="${h(() => openSheet("profile"))}">${lifeEmoji(L)}</button>
@@ -350,12 +353,54 @@ function renderGame(L) {
   return `<div class="app-shell ${mode}">${phone}${mode === "desktop" ? `<aside class="sheet-panel">${renderSheet(L, mode)}</aside>` : ""}</div>`;
 }
 
+/// The computer layout: a full-screen game with a top bar, your character on the left,
+/// your story in the middle and the open menu on the right.
+const MainMenus = [["occupation", "💼", "Occupation"], ["assets", "🏠", "Assets"], ["relationships", "❤️", "Relationships"], ["activities", "🎯", "Activities"]];
+const ExtraMenus = [["packs", "🎁", "Expansion Packs"], ["profile", "🪪", "Profile & Settings"], ["god", "⚡", "God Mode"]];
+
+function renderDesktop(L, { chips, blocked, feedHtml, newLife }) {
+  const s = L.stats;
+  const nav = (list, keys) => list.map(([id, emoji, label], i) => {
+    const lbl = id === "occupation" && inPrison(L) ? "Prison" : label;
+    return `<button class="pc-nav${ui.tab === id ? " on" : ""}" data-h="${h(() => openSheet(id))}"><span class="pc-nav-ico">${id === "occupation" && inPrison(L) ? "⛓️" : emoji}</span><span>${lbl}</span>${keys ? `<kbd>${i + 1}</kbd>` : ""}</button>`;
+  }).join("");
+  return `<div class="pc">
+    <header class="pc-top">
+      <div class="pc-logo">Life<span>Sim</span></div>
+      <div class="pc-top-mid"><span>📍 ${esc(L.city)}, ${esc(L.country)}</span><span>🎂 Age ${L.age}</span><span>💰 Net worth ${formatMoney(netWorth(L))}</span></div>
+      <div class="pc-top-btns">
+        <button class="pc-top-btn" data-h="${h(toggleLayout)}" title="Switch to the phone layout">📱 Phone view</button>
+        <button class="pc-top-btn" data-h="${h(newLife)}">🔄 New life</button>
+      </div>
+    </header>
+    <div class="pc-main">
+      <aside class="pc-left">
+        <div class="pc-char">
+          <button class="pc-avatar" aria-label="Your profile" data-h="${h(() => openSheet("profile"))}">${lifeEmoji(L)}</button>
+          <div class="pc-name">${esc(fullName(L))}</div>
+          <div class="pc-sub">${esc(subtitleOf(L))}</div>
+          <div class="pc-money ${L.money < 0 ? "neg" : "pos"}">${formatMoney(L.money)}</div>
+        </div>
+        <div class="pc-stats">${statBar("Happiness", "😊", s.happiness)}${statBar("Health", "❤️", s.health)}${statBar("Smarts", "🧠", s.smarts)}${statBar("Looks", "✨", s.looks)}</div>
+        ${chips.length ? `<div class="chips">${chips.join("")}</div>` : ""}
+        <button class="age-btn pc-age" ${blocked ? "disabled" : ""} data-h="${h(ageUpNow)}">＋ Age up <span class="kbd">Space</span></button>
+        <nav class="pc-navs">${nav(MainMenus, true)}<div class="pc-nav-sep"></div>${nav(ExtraMenus, false)}</nav>
+      </aside>
+      <main class="pc-story">
+        <div class="pc-story-head"><h2>Your story</h2><span>${plural(L.log.length, "year")} lived</span></div>
+        <div class="feed log">${feedHtml}</div>
+      </main>
+      <aside class="pc-menu">${renderSheet(L, "desktop")}</aside>
+    </div>
+  </div>`;
+}
+
 // MARK: Layout: phone or computer
 
 function layoutMode() {
   const pref = store.settings.layout || "auto";
   if (pref !== "auto") return pref;
-  return window.innerWidth < 900 ? "mobile" : "desktop";
+  return window.innerWidth < 1000 ? "mobile" : "desktop";
 }
 function toggleLayout() {
   store.settings.layout = layoutMode() === "mobile" ? "desktop" : "mobile";
@@ -964,6 +1009,7 @@ function onKey(e) {
   if (e.key === "Enter" && e.target.id === "name-input") { e.preventDefault(); document.querySelector("[data-name-ok]")?.click(); return; }
   if (e.target.closest("input, textarea, select")) return;
   if (store.life?.toName?.length) return;
+  if (store.life?.isAlive && layoutMode() === "desktop" && !ui.choice && !ui.outcome && ["1", "2", "3", "4"].includes(e.key)) { openSheet(MainMenus[Number(e.key) - 1][0]); return; }
   if (e.key === " " || e.key === "Spacebar") {
     if (ui.outcome) { e.preventDefault(); ui.outcome = null; render(); return; }
     if (store.life?.popups?.length && !store.life.pendingEvents.length) { e.preventDefault(); store.life.popups.shift(); save(); render(); return; }
