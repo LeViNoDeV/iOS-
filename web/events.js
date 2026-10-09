@@ -134,7 +134,7 @@ function choiceEvent(L) {
   if (age >= 16 && age <= 60 && !romanticPartner(L)) {
     const person = makePerson("partner", datingAge(L), { gender: preferredGender(L), bond: rnd(50, 80) });
     person.money = rnd(0, 150000);
-    events.push(ev("askedOut", { person }, "Love is in the air", `${relName(person)} (${person.age}) asked you out on a date. Looks: ${person.looks}%.`, ["Say yes", "Say no"]));
+    events.push(ev("askedOut", { person }, "Love is in the air", `${relName(person)} (${person.age}) asked you out on a date.\n${statLine(person)}`, ["Say yes", "Say no"]));
   }
   if (age >= 8) {
     const species = pick(Names.petSpecies);

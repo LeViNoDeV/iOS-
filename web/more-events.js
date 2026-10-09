@@ -252,8 +252,8 @@ const SIMPLE_EVENTS = {
       if (c === 1) return "I passed on the raffle.";
       L.money -= 10; L.karma += 1;
       if (roll(0.03)) {
-        L.assets.push({ id: uid(), kind: "car", name: "Compact Sedan", purchasePrice: 0, value: 22000, yearsOwned: 0, loan: 0 });
-        adjust(L, { happiness: 25 }); return "🎉 I won the raffle! I drove home in a brand-new car.";
+        const car = giveVehicle(L, "everyday", "Toyota Corolla");
+        adjust(L, { happiness: 25 }); return `🎉 I won the raffle! The prize is a brand-new ${car.name}.${L.hasDriversLicense ? "" : " Now I need a driver's license."}`;
       }
       return "I didn't win the raffle, but it was for a good cause.";
     },

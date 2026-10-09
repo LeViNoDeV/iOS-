@@ -268,6 +268,7 @@ function makePerson(kind, age, opts = {}) {
     trait: opts.noTrait ? null : randomTrait(), occupation: null, salary: 0, lastContact: null, yearsTogether: 0,
   };
   assignOccupation(p);
+  ensureNpcStats(p);
   return p;
 }
 
@@ -354,8 +355,12 @@ function newLife(first, last, gender) {
   for (let i = 0; i < siblingCount; i++) {
     const s = makePerson("sibling", rnd(1, Math.min(15, Math.max(1, mother.age - 18))), { lastName: last });
     s.money = 0;
+    applyInheritance(s, mother, father);
     L.relationships.push(s);
   }
+  // You take after your parents, partly.
+  const genes = inheritedStats(mother, father);
+  L.stats.looks = genes.looks; L.stats.smarts = genes.smarts; L.stats.health = genes.health;
   let intro = `I was born a ${g} in ${place[0]}, ${place[1]}. My mother is ${relName(mother)} (${mother.age}) and my father is ${relName(father)} (${father.age}).`;
   if (siblingCount > 0) {
     const names = L.relationships.filter((p) => p.kind === "sibling").map((p) => `${relTitle(p).toLowerCase()} ${p.firstName}`);
@@ -700,16 +705,8 @@ function progressFame(L) {
 }
 
 function progressFinances(L) {
-  for (const a of L.assets) {
-    L.money -= a.kind === "house" ? idiv(a.value, 100) : idiv(a.value, 20);
-    if (a.loan > 0) {
-      const payment = Math.min(a.loan, Math.max(1000, idiv(a.purchasePrice, 15)));
-      a.loan -= payment;
-      L.money -= payment;
-      if (a.loan === 0) record(L, `I paid off the loan on my ${a.name}!`);
-    }
-  }
-  if (L.age >= 18 && !L.enrollment && !inPrison(L) && !L.job && !L.isRetired && L.assets.length === 0 && !livesWithParents(L)) {
+  // Homes and vehicles pay their own costs and loans in progressAssets.
+  if (L.age >= 18 && !L.enrollment && !inPrison(L) && !L.job && !L.isRetired && !ownsHome(L) && !livesWithParents(L)) {
     L.money -= 6000;
   }
   if (L.money < -50000 && roll(0.3)) {
@@ -719,16 +716,14 @@ function progressFinances(L) {
 }
 
 function progressAssets(L) {
-  for (const a of L.assets) {
-    a.yearsOwned += 1;
-    a.value = Math.trunc(a.value * (a.kind === "house" ? rndf(0.97, 1.08) : rndf(0.82, 0.92)));
-  }
+  progressHomes(L);
+  progressVehicles(L);
 }
 
-function personDies(age, isPet) {
-  if (isPet) return age > 8 && roll((age - 8) * 0.08);
+function personDies(age, isPet, healthFactor = 1, lifespan = 12) {
+  if (isPet) return age > lifespan - 4 && roll((age - (lifespan - 4)) * 0.08 * healthFactor);
   if (age >= AGING.maxAge) return true;
-  return roll(0.0004 + ageHazard(age) * 1.1);
+  return roll(0.0004 + ageHazard(age) * 1.1 * healthFactor);
 }
 
 function progressRelationships(L) {
@@ -747,7 +742,8 @@ function progressRelationships(L) {
     if (p.age === 18 && !p.occupation && p.kind !== "child") assignOccupation(p);
     if (p.age === 67 && p.salary > 0) { p.occupation = "Retired"; p.salary = 0; }
 
-    if (personDies(p.age, p.kind === "pet")) {
+    progressNpcStats(L, p);
+    if (personDies(p.age, p.kind === "pet", npcHealthFactor(p), p.kind === "pet" ? petInfo(p).life : 12)) {
       p.isAlive = false;
       notify(L, "🕊️", "Rest in Peace", `🕊️ My ${relTitle(p).toLowerCase()} ${p.firstName} ${p.kind === "pet" ? "passed away" : "died"} at age ${p.age}.`);
       adjust(L, { happiness: -(idiv(p.bond, 4) + 5) });
@@ -905,7 +901,10 @@ function continueAs(L, child) {
   const next = blankLife(child.firstName, child.lastName, child.gender, L.city, L.country);
   next.age = child.age;
   next.generation = L.generation + 1;
+  ensureNpcStats(child);
   next.stats.looks = child.looks;
+  next.stats.smarts = child.smarts;
+  next.stats.health = Math.max(child.health, 40);
   if (child.age >= 18) next.education = "highSchool";
   if (child.age >= 5 && child.age <= 17) next.schoolGrades = rnd(40, 90);
   const heirs = heirsOf(L);
@@ -923,5 +922,6 @@ function continueAs(L, child) {
   let intro = `I am ${child.firstName} ${child.lastName}, generation ${next.generation}. My ${L.gender === "male" ? "father" : "mother"} ${fullName(L)} died at ${L.age}.`;
   if (inheritance > 0) intro += ` I inherited ${formatMoney(inheritance)}.`;
   next.log = [{ age: child.age, entries: [intro] }];
+  inheritRoyalty(L, next, child);
   return next;
 }

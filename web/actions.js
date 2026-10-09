@@ -104,6 +104,8 @@ function commitCrime(L, crimeId) {
 
 function sendToPrison(L, years) {
   L.prisonYearsLeft = Math.max(L.prisonYearsLeft, years);
+  if (!L.prisonLife || L.prisonLife.sentence == null) { L.prisonLife = null; prisonLife(L); }
+  else L.prisonLife.sentence = Math.max(L.prisonLife.sentence, L.prisonLife.served + L.prisonYearsLeft);
   if (L.job) { record(L, `I lost my job as a ${L.job.title}.`); L.job = null; }
   if (L.enrollment) { record(L, "I was expelled from school."); L.enrollment = null; }
   adjust(L, { happiness: -25 });
@@ -437,15 +439,6 @@ function goToRehab(L) {
 
 const canTakeDrivingTest = (L) => L.age >= 16 && !L.hasDriversLicense && !inPrison(L);
 
-function takeDrivingTest(L) {
-  if (roll(0.4 + L.stats.smarts / 200)) {
-    L.hasDriversLicense = true;
-    adjust(L, { happiness: 10 });
-    return out(L, "Driving Test", "🚗 I passed my driving test and got my license!");
-  }
-  adjust(L, { happiness: -5 });
-  return out(L, "Driving Test", `I failed my driving test. ${pick(["I hit a cone.", "I forgot to signal.", "I ran a stop sign.", "I parallel parked on the curb."])}`);
-}
 
 function emigrate(L, place) {
   if (L.age < 18) return out(L, "Emigrate", "I'm too young to move abroad by myself.", false);
@@ -509,30 +502,11 @@ const canHookUp = (L) => L.age >= 18 && !inPrison(L);
 
 function findDate(L, gender) {
   if (gender) L.datingPreference = gender;
-  if (!roll(0.35 + L.stats.looks / 200)) {
-    adjust(L, { happiness: -3 });
-    return out(L, "Dating", "I went looking for love, but struck out.");
-  }
-  const p = makePerson("partner", datingAge(L, 5), { gender: preferredGender(L), bond: rnd(50, 80) });
-  p.lastContact = L.age;
-  L.relationships.push(p);
-  bump(L, "partners");
-  adjust(L, { happiness: 10 });
-  return out(L, "Dating", `❤️ I met ${relName(p)} (${p.age}) and we started dating!`);
+  return approachCandidate(L, makeCandidate(L, "date"), "date");
 }
 
 function makeFriend(L) {
-  const f = makePerson("friend", Math.max(5, L.age + rnd(-3, 3)), { bond: rnd(40, 70) });
-  f.lastContact = L.age;
-  L.relationships.push(f);
-  adjust(L, { happiness: 4 });
-  let m = `I made a new friend named ${relName(f)}.`;
-  const partner = romanticPartner(L);
-  if (partner && partner.trait === "jealous") {
-    updateRel(L, partner.id, (p) => { p.bond -= 8; });
-    m += ` ${partner.firstName} got jealous of how much time I spend with them.`;
-  }
-  return out(L, "New Friend", m);
+  return approachCandidate(L, makeCandidate(L, "friend"), "friend");
 }
 
 function hookUp(L) {
@@ -555,7 +529,7 @@ function hookUp(L) {
 
 function relationshipActions(L, p) {
   if (!p.isAlive || inPrison(L)) return [];
-  if (p.kind === "pet") return ["play", "walkPet", ...Object.keys(PetExtraActions)];
+  if (p.kind === "pet") return petActionsFor(p);
   if (p.kind === "teacher") return ["askHelp", "suckUp", "disrespect"];
   if (p.kind === "classmate") return extraRelActions(L, p).concat(["conversation", "compliment", "insult"], L.age >= 6 ? ["prank"] : []);
   const list = ["spendTime", "conversation", "compliment"].concat(extraRelActions(L, p));
@@ -666,34 +640,3 @@ function performRelAction(L, action, id) {
   return out(L, relName(p), remember(L, p, m));
 }
 
-// MARK: Assets
-
-function marketListings(kind) {
-  const source = kind === "house" ? Names.houses : kind === "car" ? Names.cars : Names.boats;
-  return source.map(([name, price]) => ({ id: uid(), kind, name, price: idiv(Math.trunc(price * rndf(0.85, 1.2)), 100) * 100 }));
-}
-
-const assetEmoji = (kind) => ({ house: "🏠", car: "🚗", boat: "🛥️" }[kind]);
-
-const canFinance = (L, listing) =>
-  listing.kind === "house" && L.job && !L.job.partTime && L.money >= idiv(listing.price, 5) && L.job.salary * 6 >= listing.price;
-
-function buyAsset(L, listing, financed = false) {
-  if (L.age < 18) return out(L, "Too Young", "I'm too young to buy that.", false);
-  if (listing.kind === "car" && !L.hasDriversLicense) return out(L, "No License", "I need a driver's license before I can buy a car.", false);
-  const down = financed ? idiv(listing.price, 5) : listing.price;
-  if (L.money < down || (financed && !canFinance(L, listing))) return out(L, "Can't Afford", `I can't afford the ${listing.name}. I need ${formatMoney(down)}.`, false);
-  L.money -= down;
-  L.assets.push({ id: uid(), kind: listing.kind, name: listing.name, purchasePrice: listing.price, value: listing.price, yearsOwned: 0, loan: listing.price - down });
-  adjust(L, { happiness: 10 });
-  return out(L, "Purchased", financed ? `I bought a ${listing.name} with a ${formatMoney(listing.price - down)} mortgage!` : `I bought a ${listing.name} for ${formatMoney(listing.price)}!`);
-}
-
-function sellAsset(L, id) {
-  const a = L.assets.find((x) => x.id === id);
-  if (!a) return out(L, "Oops", "I don't own that anymore.", false);
-  L.assets = L.assets.filter((x) => x.id !== id);
-  L.money += a.value - a.loan;
-  const payoff = a.loan > 0 ? ` After paying off the loan I kept ${formatMoney(a.value - a.loan)}.` : "";
-  return out(L, "Sold", `I sold my ${a.name} for ${formatMoney(a.value)}.${payoff}`);
-}

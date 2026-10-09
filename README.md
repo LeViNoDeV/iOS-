@@ -16,15 +16,19 @@ The web code mirrors the iOS app's game logic: `engine.js` (aging, health, money
 More web files:
 
 - `social-plus.js`: friendships, dating and childhood activities.
+- `npc.js`: stats for every person (looks, smarts, health, happiness, craziness), stats children inherit from their parents, and meeting people one at a time. When you find a date or make a friend you see their stats first, then choose to ask them out, befriend them or meet someone else.
+- `vehicles.js`: real cars, motorcycles, boats, yachts, planes, private jets and helicopters, and the licenses to use them (driver's, motorcycle, boating, captain's, private pilot, jet type rating, helicopter). Lessons, flight hours and days at sea count toward them. Yachts and aircraft can be run by a hired crew instead.
+- `realestate.js`: homes with real addresses, sizes, ages and condition; inspections that find hidden problems; mortgages; upkeep, repairs and renovations; renting out; and a housing market that moves prices every year. Well-kept, renovated homes gain value; neglected ones lose it.
 - `godmode.js`: God Mode and the Time Machine.
 - `world.js`: all 197 countries you can emigrate to, each with its capital and major cities.
-- `packs.js` and `ui-packs.js`: the expansion packs on the **🎁 Packs** tab:
-  - **Boss Mode:** start and run businesses, launch products, expand, go public.
-  - **Royalty:** be born royal from the start screen, gain popularity, take the throne.
-  - **Organized Crime:** join a crime family, rise through the ranks, avoid the FBI.
-  - **Pets & Zoo:** exotic pets, pet training and shows, run your own zoo.
-  - **Fame:** celebrity actions such as interviews and endorsements.
-  - **Prison life:** prison gangs, contraband, digging a tunnel, parole hearings.
+- The expansion packs, on the **🎁 Packs** tab (`packs.js` has the shared parts, `ui-packs.js` the screens):
+  - `business.js`, **Boss Mode:** set prices, wages, staffing and marketing; the business has its own bank account, loans, investors and an IPO, and hands you decisions (inspections, strikes, lawsuits, buyout offers).
+  - `royalty.js`, **Royalty:** 25 real monarchies with their own titles, succession laws (equal, male-preference, male-only) and powers (constitutional or absolute). Public approval, royal duties, patronages, referendums and unrest.
+  - `crime.js`, **Organized Crime:** respect, loyalty and heat; rackets and kick-ups; yearly orders from the family; grand juries; becoming an informant.
+  - `zoo.js`, **Pets & Zoo:** pet care costs and lifespans, permits, land and enclosures for exotic animals, and a zoo with exhibits, keepers, habitats, conservation and accreditation.
+  - `fame.js`, **Fame:** public image, an agent and a publicist, brand deals and scandals.
+  - `prison.js`, **Prison:** jobs, a GED, gangs, appeals with different lawyers, parole after a third of your sentence, and escapes that make you a fugitive.
+- `ui-assets.js`: the Money tab, real estate, vehicles and licenses screens.
 
 When you have a baby, adopt a child or get a pet, the game asks you to name them. You can rename children, pets, businesses and zoos later.
 

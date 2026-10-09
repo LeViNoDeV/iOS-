@@ -82,7 +82,7 @@ function act(fn) {
 
 function ageUpNow() {
   const L = store.life;
-  if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || (L.toName || []).length || ui.outcome || ui.choice) return;
+  if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || (L.toName || []).length || ui.outcome || ui.choice || ui.candidate) return;
   pushSnapshot(L);
   const ids = relIds(L);
   ageUp(L);
@@ -241,6 +241,8 @@ function renderGame(L) {
   for (const id of L.illnesses) chips.push(`<span class="chip warn">🤒 ${esc(Illnesses[id].name.replace(/^an? /, ""))}</span>`);
   for (const a of L.addictions) chips.push(`<span class="chip bad">⚠️ ${esc(Addictions[a])}</span>`);
   if (inPrison(L)) chips.push(`<span class="chip bad">🔒 In prison</span>`);
+  if (L.fugitive && !inPrison(L)) chips.push(`<span class="chip bad">🏃 Fugitive</span>`);
+  if (L.mob) chips.push(`<span class="chip">🕴️ ${esc(MobRanks[L.mob.rank])}</span>`);
   if (L.mature) chips.push(`<span class="chip">🔞 Mature</span>`);
   if (L.pregnancy) chips.push(`<span class="chip warn">🤰 ${L.pregnancy.carrier === "me" ? "Pregnant" : `${esc(L.pregnancy.partnerName)} is pregnant`} · due next year</span>`);
 
@@ -400,62 +402,9 @@ function renderCareer(L) {
 // MARK: Prison
 
 function renderPrison(L) {
-  let html = section(`Prison · ${plural(L.prisonYearsLeft, "year")} left`, PrisonActions.map((a) => row(a.emoji, a.title, null, () => act((x) => prisonAction(x, a.id)))).join(""));
-  html += renderPrisonPack(L);
+  let html = renderPrisonPack(L);
   if (L.criminalRecord.length) html += section("Criminal record", L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   return html;
-}
-
-// MARK: Assets tab
-
-function renderAssets(L) {
-  let fin = lv("Bank balance", formatMoney(L.money), L.money < 0 ? "money-neg" : "money-pos") + lv("Net worth", formatMoney(netWorth(L)));
-  if (L.studentLoans > 0) fin += lv("Student loans", formatMoney(L.studentLoans), "money-neg");
-  if (L.job) fin += lv("Salary (after tax)", `${formatMoney(Math.trunc(L.job.salary * 0.75))}/yr`);
-  if (spouseContribution(L) > 0) fin += lv("Spouse contributes", `+${formatMoney(spouseContribution(L))}/yr`, "money-pos");
-  if (childExpenses(L) > 0) fin += lv("Child expenses", `-${formatMoney(childExpenses(L))}/yr`, "money-neg");
-  let html = section("Finances", fin);
-
-  const stuff = L.assets.length
-    ? L.assets.map((a) => row(assetEmoji(a.kind), a.name, a.loan > 0 ? `Loan: ${formatMoney(a.loan)}` : `Bought for ${formatMoney(a.purchasePrice)}`, () =>
-      choose(`Sell your ${a.name}?`, `It's worth ${formatMoney(a.value)} today${a.loan > 0 ? `, and ${formatMoney(a.loan)} goes to paying off the loan` : ""}.`, [
-        { label: `Sell for ${formatMoney(a.value)}`, fn: () => act((x) => sellAsset(x, a.id)) }, { label: "Keep it", secondary: true, fn: () => {} },
-      ]), { right: formatMoney(a.value) })).join("")
-    : `<div class="pad muted">You don't own anything yet.</div>`;
-  html += section("My stuff", stuff, L.assets.length ? "Houses cost 1% of their value a year to keep up; cars and boats cost 5%. Click one to sell it." : null);
-
-  let shop;
-  if (L.age < 18) shop = `<div class="pad muted">You can start buying property and cars at 18.</div>`;
-  else if (inPrison(L)) shop = `<div class="pad muted">You can't go shopping from prison.</div>`;
-  else shop = row("🏡", "Real estate", "Buy a home, with cash or a mortgage", () => push({ type: "market", kind: "house" }), { chev: true })
-    + row("🚘", "Car dealership", L.hasDriversLicense ? "Buy a ride" : "Requires a driver's license", () => push({ type: "market", kind: "car" }), { chev: true })
-    + row("⛵", "Boat dealership", "Hit the water", () => push({ type: "market", kind: "boat" }), { chev: true });
-  html += section("Shopping", shop);
-  return html;
-}
-
-function renderMarket(L, view) {
-  if (!view.listings) view.listings = marketListings(view.kind);
-  const title = { house: "Real estate", car: "Car dealership", boat: "Boat dealership" }[view.kind];
-  const rows = view.listings.map((l) => {
-    const fin = canFinance(L, l);
-    const affordable = L.money >= l.price || fin;
-    const buy = (financed) => act((x) => {
-      const before = x.assets.length;
-      const r = buyAsset(x, l, financed);
-      if (x.assets.length > before) view.listings = view.listings.filter((y) => y.id !== l.id);
-      return r;
-    });
-    return row(assetEmoji(l.kind), l.name, fin ? `Mortgage available · ${formatMoney(Math.trunc(l.price / 5))} down` : null, () => {
-      if (!fin) return buy(false);
-      const opts = [];
-      if (L.money >= l.price) opts.push({ label: `Pay ${formatMoney(l.price)} cash`, fn: () => buy(false) });
-      opts.push({ label: `Mortgage (${formatMoney(Math.trunc(l.price / 5))} down)`, fn: () => buy(true) });
-      opts.push({ label: "Cancel", secondary: true, fn: () => {} });
-      choose(`Buy the ${l.name}?`, `Price: ${formatMoney(l.price)}. A mortgage is paid off over about 12 years.`, opts);
-    }, { disabled: !affordable, right: `<span class="${affordable ? "money-pos" : "money-neg"}">${formatMoney(l.price)}</span>` });
-  }).join("");
-  return section(title, lv("Bank balance", formatMoney(L.money)) + rows);
 }
 
 // MARK: People tab
@@ -469,11 +418,12 @@ function renderPeople(L) {
 
   if (!inPrison(L)) {
     let meet = "";
-    if (canFindDate(L)) meet += row("❤️", "Find a date", "Look for love", () => choose("Who are you interested in?", null, [
-      { label: "Men", fn: () => act((x) => findDate(x, "male")) }, { label: "Women", fn: () => act((x) => findDate(x, "female")) },
+    if (canFindDate(L)) meet += row("❤️", "Find a date", "Meet someone and see if you click", () => choose("Who are you interested in?", null, [
+      { label: "Men", fn: () => { L.datingPreference = "male"; openCandidate("date"); } },
+      { label: "Women", fn: () => { L.datingPreference = "female"; openCandidate("date"); } },
     ]), { chev: true });
     if (canHookUp(L)) meet += row("🔥", "Hook up", romanticPartner(L) ? "Cheat on your partner..." : "No strings attached", () => act(hookUp));
-    if (L.age >= 5) meet += row("🤝", "Make a friend", null, () => act(makeFriend));
+    if (L.age >= 5) meet += row("🤝", "Make a friend", "Meet someone new", () => openCandidate("friend"), { chev: true });
     if (L.age >= 8) meet += row("🐾", "Pet shelter", "Adopt a pet · $200", () => choose("Adopt a pet", null, Names.petSpecies.map((sp) => ({ label: `${petEmoji[sp]} ${sp}`, fn: () => act((x) => adoptPet(x, sp)) }))), { chev: true });
     if (canAdoptChild(L)) meet += row("🍼", "Adopt a child", "Agency fees · $10,000", () => act(adoptChild));
     html += section("Meet people", meet);
@@ -520,12 +470,46 @@ function personRow(L, p) {
   return row(relEmoji(p), relName(p), parts.join(" · "), () => push({ type: "person", id: p.id }), { extra: bar, chev: true });
 }
 
+/// Stat bars for a person (pets only show health).
+function npcStatBars(p) {
+  ensureNpcStats(p);
+  if (p.species) return statBar("Health", "❤️", p.health);
+  return NpcStats.map(([k, e, label]) => statBar(label, e, p[k])).join("");
+}
+
+function openCandidate(mode) {
+  ui.candidate = { mode, person: makeCandidate(store.life, mode) };
+  render();
+}
+
+const oddsWord = (c) => (c >= 0.7 ? "Good odds" : c >= 0.45 ? "Fair odds" : c >= 0.25 ? "Long shot" : "Very long shot");
+
+function renderCandidateModal(L) {
+  const { mode, person: p } = ui.candidate;
+  const go = (as) => h(() => { ui.candidate = null; act((x) => approachCandidate(x, p, as)); });
+  const next = h(() => { ui.candidate.person = makeCandidate(L, mode); render(); });
+  const close = h(() => { ui.candidate = null; render(); });
+  const facts = [p.occupation ? (p.salary > 0 ? `${p.occupation} · ${formatMoney(p.salary)}/yr` : p.occupation) : null, p.trait ? `${Traits[p.trait][0]} ${cap(p.trait)}` : null].filter(Boolean);
+  let buttons = "";
+  if (canAskOutCandidate(L, p)) buttons += `<button class="choice" data-h="${go("date")}">💌 Ask them out <span class="odds">· ${oddsWord(askOutChance(L, p))}</span></button>`;
+  buttons += `<button class="choice${mode === "date" && canAskOutCandidate(L, p) ? " secondary" : ""}" data-h="${go("friend")}">🤝 Befriend them <span class="odds">· ${oddsWord(befriendChance(L, p))}</span></button>`;
+  buttons += `<button class="choice secondary" data-h="${next}">Meet someone else ›</button>`;
+  buttons += `<button class="choice secondary" data-h="${close}">Not now</button>`;
+  return `<div class="scrim"><div class="modal event candidate" role="dialog" aria-modal="true" aria-labelledby="m-title" data-stop="1">
+    <div class="event-head"><div class="event-emoji" aria-hidden="true">${avatarEmoji(p.age, p.gender)}</div><div class="modal-tag">${mode === "date" ? "Dating" : "Making friends"}</div>
+      <h3 id="m-title">${esc(relName(p))}, ${p.age}</h3></div>
+    <div class="event-body"><p>You met ${esc(p.firstName)} ${esc(p.metAt)}.${facts.length ? ` ${esc(facts.join(" · "))}` : ""}</p>
+      ${p.trait ? `<p class="muted" style="margin-top:-6px">${esc(Traits[p.trait][1])}</p>` : ""}
+      <div class="cand-stats">${npcStatBars(p)}${lv("Money", formatMoney(p.money))}</div>
+      <div class="choices">${buttons}</div></div></div></div>`;
+}
+
 function renderPerson(L, view) {
   const p = findRel(L, view.id);
   if (!p) return `<div class="pad muted">They're no longer in your life.</div>`;
   let html = `<div class="hero-person"><div class="big">${relEmoji(p)}</div><h3>${esc(relName(p))}</h3><div class="muted">${esc(relTitle(p))} · ${p.isAlive ? `Age ${p.age}` : "Deceased"}</div></div>`;
   if (p.isAlive) {
-    html += `<div class="list pad">${statBar("Relationship", "💞", p.bond)}${p.species ? "" : statBar("Looks", "✨", p.looks)}</div>`;
+    html += `<div class="list pad">${statBar("Relationship", "💞", p.bond)}${npcStatBars(p)}</div>`;
   }
   if (p.isAlive && !p.species) {
     let about = "";
@@ -533,6 +517,8 @@ function renderPerson(L, view) {
     if (st) about += lv("Status", st);
     if (p.trait) about += `<div class="pad"><b>${Traits[p.trait][0]} ${cap(p.trait)}</b><div class="row-sub">${Traits[p.trait][1]}</div></div>`;
     if (p.occupation) about += lv("Occupation", esc(p.salary > 0 ? `${p.occupation} · ${formatMoney(p.salary)}/yr` : p.occupation));
+    about += lv("Money", formatMoney(p.money || 0));
+    if (p.inherited && p.kind === "child") about += lv("Genes", "Takes after you and their other parent");
     if (isRomantic(p.kind) && p.yearsTogether > 0) about += lv("Together", plural(p.yearsTogether, "year"));
     const ys = yearsSinceContact(p, L.age);
     if (ys != null) about += lv("Last talked", ys <= 0 ? "This year" : `${plural(ys, "year")} ago`, ys >= 2 ? "red" : "");
@@ -590,7 +576,7 @@ function renderActivities(L) {
   }
 
   let more = row("🎰", "Casino", L.age >= 18 ? "Blackjack, roulette, slots & horses" : "Available at 18", () => push({ type: "casino" }), { disabled: L.age < 18, chev: true });
-  if (canTakeDrivingTest(L)) more += row("🚦", "Driving test", "Get your license", () => act(takeDrivingTest));
+  more += row("🪪", "Licenses", L.age >= 15 ? "Driving, motorcycle, boating, captain, pilot, jet and helicopter" : "Available at 15", () => push({ type: "licenses" }), { disabled: L.age < 15, chev: true });
   more += row("✈️", "Emigrate", L.age >= 18 ? `${WORLD.length} countries · from $2,000` : "Available at 18", () => { ui.emigrateCountry = null; push({ type: "emigrate" }); }, { disabled: L.age < 18, chev: true });
   html += section("More", more);
 
@@ -626,7 +612,7 @@ function renderEmigrate(L) {
 function renderProfile(L) {
   let about = lv("Lives in", esc(`${L.city}, ${L.country}`)) + lv("Gender", cap(L.gender)) + lv("Generation", L.generation)
     + lv("Education", eduLabel[L.education]) + lv("Occupation", esc(L.job ? L.job.title : L.isRetired ? "Retired" : schoolName(L) || "None"))
-    + lv("Net worth", formatMoney(netWorth(L))) + lv("Driver's license", L.hasDriversLicense ? "Yes" : "No")
+    + lv("Net worth", formatMoney(netWorth(L))) + lv("Licenses", esc(Object.keys(Licenses).filter((id) => hasLicense(L, id)).map((id) => Licenses[id].name).join(", ") || "None"))
     + lv("Followers", formatCount(L.followers)) + lv("Partners", count(L, "partners")) + lv("Children", childrenOf(L).length);
   let html = section("About me", about);
   let health = "";
@@ -646,11 +632,18 @@ function renderProfile(L) {
 function renderSubview(L, view) {
   switch (view.type) {
     case "person": return renderPerson(L, view);
-    case "market": return renderMarket(L, view);
+    case "homes": return renderHomeMarket(L, view);
+    case "listing": return renderListing(L, view);
+    case "home": return renderHome(L, view);
+    case "vehicles": return renderVehicleMarket(L, view);
+    case "vehicle": return renderVehicle(L, view);
+    case "licenses": return renderLicenses(L);
+    case "license": return renderLicense(L, view);
     case "casino": return renderCasino(L);
     case "emigrate": return renderEmigrate(L);
     case "godPerson": return renderGodPerson(L, view);
     case "business": return renderBusiness(L, view);
+    case "pack": return renderPack(L, view);
   }
   return "";
 }
@@ -710,7 +703,9 @@ function renderModals(L) {
       buttons: `<button class="choice" data-h="${next}">${L.popups.length > 1 ? "Next" : "OK"}</button>`,
     });
   }
-  // 4. Pickers and confirmations.
+  // 4. Someone new you could date or befriend.
+  if (ui.candidate && L && L.isAlive) return renderCandidateModal(L);
+  // 5. Pickers and confirmations.
   if (ui.choice) {
     const c = ui.choice;
     return `<div class="scrim" data-h="${h(() => { ui.choice = null; render(); })}"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title" data-stop="1">
@@ -739,9 +734,9 @@ function onKey(e) {
   if (e.key === " " || e.key === "Spacebar") {
     if (ui.outcome) { e.preventDefault(); ui.outcome = null; render(); return; }
     if (store.life?.popups?.length && !store.life.pendingEvents.length) { e.preventDefault(); store.life.popups.shift(); save(); render(); return; }
-    if (store.life && store.life.isAlive && !ui.choice && !store.life.pendingEvents.length) { e.preventDefault(); ageUpNow(); }
+    if (store.life && store.life.isAlive && !ui.choice && !ui.candidate && !store.life.pendingEvents.length) { e.preventDefault(); ageUpNow(); }
   } else if (e.key === "Escape") {
-    if (ui.outcome || ui.choice) { ui.outcome = null; ui.choice = null; render(); }
+    if (ui.outcome || ui.choice || ui.candidate) { ui.outcome = null; ui.choice = null; ui.candidate = null; render(); }
     else if (store.life?.popups?.length && !store.life.pendingEvents.length) { store.life.popups.shift(); save(); render(); }
     else if (ui.stack.length) { ui.stack.pop(); render(); }
   }

@@ -124,16 +124,17 @@ function dealDrugs(L) {
 /// Adults only: pregnancy is never possible for characters under 18.
 function startPregnancy(L, partner) {
   if (L.age < 18 || L.pregnancy) return "";
-  L.pregnancy = { partnerId: partner.id || null, partnerName: partner.firstName, carrier: L.gender === "female" ? "me" : "partner", dueAge: L.age + 1 };
+  L.pregnancy = { partnerId: partner.id || null, partnerName: partner.firstName, carrier: L.gender === "female" ? "me" : "partner", dueAge: L.age + 1,
+    partnerStats: partner.looks != null ? { looks: partner.looks, smarts: partner.smarts ?? 50, health: partner.health ?? 70 } : null };
   const text = L.gender === "female" ? "I'm pregnant! 🤰 The baby is due next year." : `${partner.firstName} is pregnant! 🤰 The baby is due next year.`;
   popup(L, "🤰", "Pregnant!", text);
   return " " + text;
 }
 
 /// A chance of pregnancy when two adults of different genders sleep together unprotected.
-function maybePregnancy(L, partnerGender, partnerName, chance, partnerId = null) {
+function maybePregnancy(L, partnerGender, partnerName, chance, partnerId = null, stats = null) {
   if (L.age < 18 || partnerGender === L.gender || L.age > 50 || L.pregnancy || !roll(chance)) return "";
-  return startPregnancy(L, { id: partnerId, firstName: partnerName, gender: partnerGender });
+  return startPregnancy(L, { id: partnerId, firstName: partnerName, gender: partnerGender, ...(stats ? { looks: stats.looks, smarts: stats.smarts, health: stats.health } : {}) });
 }
 
 /// Runs each year: a pregnancy that started last year ends with a birth.
@@ -144,8 +145,10 @@ function progressPregnancy(L) {
   const g = pick(["male", "female"]);
   const baby = makePerson("child", 0, { gender: g, lastName: L.lastName, bond: 95 });
   baby.occupation = null; baby.salary = 0; baby.money = 0; baby.lastContact = L.age;
-  L.relationships.push(baby);
   const partner = pg.partnerId ? findRel(L, pg.partnerId) : null;
+  // The baby takes after both parents: you, and the partner (or a one-night stand).
+  applyInheritance(baby, playerAsParent(L), partner ? ensureNpcStats(partner) : pg.partnerStats || strangerParent());
+  L.relationships.push(baby);
   if (partner) { touch(L, partner.id); updateRel(L, partner.id, (x) => { x.bond += 8; }); }
   if (pg.carrier === "me") adjust(L, { health: -4, happiness: 12 });
   else adjust(L, { happiness: 10 });
@@ -199,7 +202,7 @@ function oneNightStand(L, protectedSex = true) {
   adjust(L, { happiness: rnd(6, 12) });
   let m = `🔥 I went home with ${relName(p)} (${p.age}) from the bar. ${pick(["No regrets.", "The walk of shame was worth it.", "We didn't exchange numbers."])}`;
   m += maybeStd(L, protectedSex ? 0.02 : 0.12);
-  if (!protectedSex) m += maybePregnancy(L, p.gender, p.firstName, 0.08);
+  if (!protectedSex) m += maybePregnancy(L, p.gender, p.firstName, 0.08, null, p);
   m += caughtCheating(L, 0.35);
   return out(L, "One-Night Stand", m);
 }
@@ -215,7 +218,7 @@ function datingAppHookup(L, protectedSex = true) {
   adjust(L, { happiness: rnd(5, 10) });
   let m = `📱 I matched with ${relName(p)} (${p.age}) and we hooked up the same night. 🔥`;
   m += maybeStd(L, protectedSex ? 0.02 : 0.1);
-  if (!protectedSex) m += maybePregnancy(L, p.gender, p.firstName, 0.08);
+  if (!protectedSex) m += maybePregnancy(L, p.gender, p.firstName, 0.08, null, p);
   m += caughtCheating(L, 0.3);
   return out(L, "Dating App", m);
 }

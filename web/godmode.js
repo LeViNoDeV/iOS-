@@ -143,7 +143,7 @@ function renderGodPerson(L, view) {
   let html = `<div class="hero-person"><div class="big">${relEmoji(p)}</div><h3>${esc(relName(p))}</h3><div class="muted">${esc(relTitle(p))} · Age ${p.age}</div></div>`;
   html += section("Edit", `<div class="pad god-sliders">
     ${godSlider("Relationship", "💞", p.bond, `data-god="person:bond:${p.id}"`)}
-    ${p.species ? "" : godSlider("Looks", "✨", p.looks, `data-god="person:looks:${p.id}"`)}
+    ${(ensureNpcStats(p), p.species ? godSlider("Health", "❤️", p.health, `data-god="person:health:${p.id}"`) : NpcStats.map(([k, e, label]) => godSlider(label, e, p[k], `data-god="person:${k}:${p.id}"`)).join(""))}
   </div>
   ${p.species ? "" : `<div class="pad god-form"><div class="field"><label for="god-trait">Personality</label>
     <select id="god-trait" data-god="person:trait:${p.id}"><option value="">No strong trait</option>${Object.keys(Traits).map((t) => `<option value="${t}" ${p.trait === t ? "selected" : ""}>${Traits[t][0]} ${cap(t)}</option>`).join("")}</select></div></div>`}`);
