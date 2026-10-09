@@ -52,6 +52,7 @@ function playMinigame(kind, opts, done) {
     cleanup();
     score = clamp(score, 0, 1);
     const pct = Math.round(score * 100);
+    Sfx.play(pct >= 70 ? "great" : pct >= 40 ? "good" : "bad");
     const word = pct >= 90 ? "Outstanding!" : pct >= 70 ? "Great job!" : pct >= 45 ? "Not bad." : pct >= 20 ? "Rough one." : "Disaster.";
     body.innerHTML = `<div class="mg-result"><div class="mg-score">${pct}%</div><div>${word}</div></div><button class="btn primary mg-continue">Continue <span class="kbd">Enter</span></button>`;
     root.querySelector(".mg-skip").remove();
@@ -99,6 +100,7 @@ const MiniGames = {
         const s = d <= zw / 2 ? 1 - (d / (zw / 2)) * 0.2 : Math.max(0, 1 - (d - zw / 2) / 0.28) * 0.55;
         scores.push(s);
         status.textContent = s >= 0.9 ? "Perfect!" : s >= 0.8 ? "Good!" : s >= 0.3 ? "Close..." : "Missed!";
+        Sfx.play(s >= 0.8 ? "hit" : "miss");
         round += 1;
         st.timers.push(setTimeout(() => {
           if (round >= rounds) { finish(scores.reduce((a, b) => a + b, 0) / rounds); return; }
@@ -135,7 +137,7 @@ const MiniGames = {
           <div class="mg-choices">${cur.opts.map((v, k) => `<button class="btn" data-v="${v}">${k + 1}. ${v}</button>`).join("")}</div><div class="mg-status muted">Question ${i + 1} of ${total} · ${correct} right</div>`;
         body.querySelectorAll("[data-v]").forEach((b) => { b.onclick = () => answer(Number(b.dataset.v)); });
       };
-      const answer = (v) => { if (st.over) return; if (v === cur.ans) correct++; i++; if (i >= total) finish(correct / total); else draw(); };
+      const answer = (v) => { if (st.over) return; Sfx.play(v === cur.ans ? "hit" : "miss"); if (v === cur.ans) correct++; i++; if (i >= total) finish(correct / total); else draw(); };
       st.keys = (e) => { const n = Number(e.key); if (n >= 1 && n <= 4 && cur) { e.preventDefault(); answer(cur.opts[n - 1]); } };
       draw();
       st.timers.push(setInterval(() => {
@@ -156,7 +158,7 @@ const MiniGames = {
       body.innerHTML = `<div class="mg-pads">${pads.map((p, k) => `<button class="mg-pad" data-k="${k}">${p}<small>${k + 1}</small></button>`).join("")}</div><div class="mg-status muted"></div>`;
       const status = body.querySelector(".mg-status");
       const padEls = [...body.querySelectorAll(".mg-pad")];
-      const flash = (k) => { padEls[k].classList.add("lit"); st.timers.push(setTimeout(() => padEls[k].classList.remove("lit"), 380)); };
+      const flash = (k) => { if (Sfx.on()) Sfx.tone([523, 659, 784, 1047][k % 4], 0, 0.3, "triangle", 0.3); padEls[k].classList.add("lit"); st.timers.push(setTimeout(() => padEls[k].classList.remove("lit"), 380)); };
       const play = () => {
         showing = true; input = [];
         seq = Array.from({ length: (o.start || 3) + round }, () => rnd(0, pads.length - 1));
@@ -169,7 +171,7 @@ const MiniGames = {
         flash(k);
         input.push(k);
         const n = input.length - 1;
-        if (input[n] !== seq[n]) { points += n / seq.length; round++; status.textContent = "Wrong!"; next(); return; }
+        if (input[n] !== seq[n]) { Sfx.play("miss"); points += n / seq.length; round++; status.textContent = "Wrong!"; next(); return; }
         if (input.length === seq.length) { points += 1; round++; status.textContent = "Correct!"; next(); }
       };
       const next = () => { showing = true; st.timers.push(setTimeout(() => (round >= rounds ? finish(points / rounds) : play()), 700)); };
@@ -201,7 +203,7 @@ const MiniGames = {
       cells.forEach((el, k) => {
         el.onclick = () => {
           if (k !== cell || st.over) return;
-          hits++; el.textContent = ""; el.classList.add("hit"); st.timers.push(setTimeout(() => el.classList.remove("hit"), 200));
+          hits++; Sfx.play("hit"); el.textContent = ""; el.classList.add("hit"); st.timers.push(setTimeout(() => el.classList.remove("hit"), 200));
           cell = -1; status.textContent = `${hits} of ${total}`;
           st.timers.push(setTimeout(spawn, 180));
         };
@@ -228,6 +230,7 @@ const MiniGames = {
         if (!v || st.over) return;
         const ok = v === words[i];
         if (ok) correct++;
+        Sfx.play(ok ? "hit" : "miss");
         spans[i].classList.remove("cur"); spans[i].classList.add(ok ? "ok" : "bad");
         input.value = ""; i++;
         body.querySelector(".mg-status").textContent = `${correct} of ${words.length}`;
@@ -257,7 +260,7 @@ const MiniGames = {
         btns.forEach((b) => { b.onclick = () => choose(Number(b.dataset.s)); });
         st.keys = (e) => { const n = Number(e.key); if (n >= 1 && n <= btns.length) { e.preventDefault(); btns[n - 1].click(); } };
       };
-      const choose = (s) => { if (st.over) return; total += s; i++; if (i >= qs.length) finish(total / qs.length); else draw(); };
+      const choose = (s) => { if (st.over) return; Sfx.play("click"); total += s; i++; if (i >= qs.length) finish(total / qs.length); else draw(); };
       draw();
     },
   },

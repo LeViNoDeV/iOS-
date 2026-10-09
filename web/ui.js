@@ -84,6 +84,7 @@ function ageUpNow() {
   const L = store.life;
   if (!L || !L.isAlive || L.pendingEvents.length || (L.popups || []).length || (L.toName || []).length || ui.outcome || ui.choice || ui.candidate) return;
   pushSnapshot(L);
+  Sfx.play("age");
   const ids = relIds(L);
   ageUp(L);
   queueNewNames(L, ids);
@@ -91,6 +92,29 @@ function ageUpNow() {
   ui.openings = null;
   save();
   render(true);
+}
+
+/// Plays a sound when a new card (event, result, news) appears.
+function playModalSound(L) {
+  let key = null, snd = null;
+  if (L && L.isAlive && L.pendingEvents.length) { key = `ev:${L.pendingEvents[0].id}`; snd = "event"; }
+  else if (L && L.isAlive && (L.toName || []).length) { key = `name:${L.toName[0].id}`; snd = "event"; }
+  else if (ui.outcome) { key = `out:${ui.outcome.title}:${ui.outcome.message}`; snd = soundForOutcome(ui.outcome); }
+  else if (L && L.isAlive && (L.popups || []).length) { const n = L.popups[0]; key = `pop:${L.popups.length}:${n.message}`; snd = soundForOutcome({ title: n.title, message: n.message }); }
+  else if (ui.candidate) { key = `cand:${ui.candidate.person.id}`; snd = "open"; }
+  if (key && key !== ui.lastSoundKey && snd) Sfx.play(snd);
+  ui.lastSoundKey = key;
+}
+
+function soundToggleRow() {
+  const on = store.settings.sound !== false;
+  return row(on ? "🔊" : "🔇", `Sound: ${on ? "On" : "Off"}`, on ? "Sound effects for actions and events · M key" : "Muted · press M to unmute", toggleSound, { right: on ? "Mute" : "Unmute" });
+}
+function toggleSound() {
+  store.settings.sound = store.settings.sound === false;
+  save();
+  if (store.settings.sound) Sfx.play("good");
+  render();
 }
 
 function choose(title, message, options) { ui.choice = { title, message, options }; render(); }
@@ -130,6 +154,7 @@ function render(scrollLog = false) {
   else html = renderGame(L);
   html += renderModals(L);
   app.innerHTML = html;
+  playModalSound(L);
   const side = app.querySelector(".side-body");
   const top = ui.stack[ui.stack.length - 1];
   const viewKey = `${store.life ? "game" : ui.startView || "start"}|${ui.tab}|${ui.sheetOpen}|${ui.stack.length}|${top ? top.type + (top.id || top.group || "") : ""}`;
@@ -241,7 +266,7 @@ function renderStart() {
       tile("👑", "Be Royal", "25 monarchies", chooseRoyalStart),
       tile("🪦", "Graveyard", store.graveyard.length ? `${store.graveyard.length} past lives` : "Empty", () => { ui.startView = "graveyard"; render(); }),
     ])}
-    ${section("Settings", layoutRow() + matureToggleRow() + minigameToggleRow())}
+    ${section("Settings", layoutRow() + soundToggleRow() + matureToggleRow() + minigameToggleRow())}
     ${store.settings.mature ? `<p class="muted small" style="margin:0">🔞 For players 18+. Mature Mode adds drinking, drugs and (non-explicit) sex for adult characters.</p>` : ""}
   </div></div>`;
 }
@@ -334,6 +359,7 @@ function renderGame(L) {
       ${iconBtn("🎁", "Packs", () => openSheet("packs"), showing && ui.tab === "packs")}
       ${iconBtn("🪪", "Me", () => openSheet("profile"), showing && ui.tab === "profile")}
       ${iconBtn("⚡", "God", () => openSheet("god"), showing && ui.tab === "god")}
+      ${iconBtn(store.settings.sound === false ? "🔇" : "🔊", store.settings.sound === false ? "Muted" : "Sound", toggleSound)}
       ${iconBtn(mode === "mobile" ? "🖥️" : "📱", mode === "mobile" ? "PC view" : "Phone view", toggleLayout)}
       ${iconBtn("🔄", "New life", newLife)}
     </nav>
@@ -369,6 +395,7 @@ function renderDesktop(L, { chips, blocked, feedHtml, newLife }) {
       <div class="pc-logo">Life<span>Sim</span></div>
       <div class="pc-top-mid"><span>📍 ${esc(L.city)}, ${esc(L.country)}</span><span>🎂 Age ${L.age}</span><span>💰 Net worth ${formatMoney(netWorth(L))}</span></div>
       <div class="pc-top-btns">
+        <button class="pc-top-btn" data-h="${h(toggleSound)}" title="Mute or unmute (M)">${store.settings.sound === false ? "🔇 Sound off" : "🔊 Sound on"}</button>
         <button class="pc-top-btn" data-h="${h(toggleLayout)}" title="Switch to the phone layout">📱 Phone view</button>
         <button class="pc-top-btn" data-h="${h(newLife)}">🔄 New life</button>
       </div>
@@ -889,7 +916,7 @@ function renderProfile(L) {
   if (L.criminalRecord.length || inPrison(L)) {
     html += section("Criminal record", (inPrison(L) ? lv("In prison", `${plural(L.prisonYearsLeft, "year")} left`) : "") + L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   }
-  html += section("Settings", layoutRow() + matureToggleRow() + minigameToggleRow());
+  html += section("Settings", layoutRow() + soundToggleRow() + matureToggleRow() + minigameToggleRow());
   html += section("Ribbon so far", (() => { const r = Ribbons[ribbonOf(L)]; return `<div class="pad">${r[1]} <b>${r[0]}</b> <span class="muted">· ${r[2]}</span></div>`; })(),
     "The ribbon you earn is decided when you die.");
   return html;
@@ -1001,7 +1028,12 @@ function onClick(e) {
   if (stop && !stop.contains(el)) return;
   if (stop && el.classList.contains("scrim")) return; // click inside the modal box, not on the backdrop
   const fn = handlers[Number(el.dataset.h)];
-  if (fn) fn();
+  if (fn) {
+    if (el.classList.contains("sheet-back")) Sfx.play("back");
+    else if (el.matches(".dock-btn, .pc-nav, .tile, .icon-btn, .sheet-close")) Sfx.play("open");
+    else if (!el.matches(".age-btn, .age-orb")) Sfx.play("click");
+    fn();
+  }
 }
 
 function onKey(e) {
@@ -1009,6 +1041,7 @@ function onKey(e) {
   if (e.key === "Enter" && e.target.id === "name-input") { e.preventDefault(); document.querySelector("[data-name-ok]")?.click(); return; }
   if (e.target.closest("input, textarea, select")) return;
   if (store.life?.toName?.length) return;
+  if ((e.key === "m" || e.key === "M") && !e.ctrlKey && !e.metaKey && !e.altKey) { toggleSound(); return; }
   if (store.life?.isAlive && layoutMode() === "desktop" && !ui.choice && !ui.outcome && ["1", "2", "3", "4"].includes(e.key)) { openSheet(MainMenus[Number(e.key) - 1][0]); return; }
   if (e.key === " " || e.key === "Spacebar") {
     if (ui.outcome) { e.preventDefault(); ui.outcome = null; render(); return; }
