@@ -187,7 +187,7 @@ function takeLicenseTest(L, id) {
   if (blockers.length) return out(L, lic.name, `Not yet: ${blockers.join("; ")}.`, false);
   if (L.money < lic.fee) return out(L, lic.name, `The test costs ${formatMoney(lic.fee)}.`, false);
   L.money -= lic.fee;
-  if (roll(clamp(lic.pass(L, trainingOf(L, id)), 0.05, 0.97))) {
+  if (skillRoll(L, clamp(lic.pass(L, trainingOf(L, id)), 0.05, 0.97))) {
     grantLicense(L, id);
     adjust(L, { happiness: 10 });
     bump(L, "licenses");

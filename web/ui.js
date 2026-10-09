@@ -152,6 +152,47 @@ function setMature(on) {
   ]);
 }
 
+function minigameToggleRow() {
+  const on = store.settings.minigames !== false;
+  return row("🎮", `Mini-games: ${on ? "On" : "Off"}`, on ? "Skill games for work, interviews, tests, the gym and crimes" : "Everything is left to luck", () => { store.settings.minigames = !on; save(); render(); }, { right: on ? "Turn off" : "Turn on" });
+}
+
+/// Which mini-game a work action uses (none for slacking, socializing or crooked actions).
+function jobGameFor(L, a) {
+  if (["coworkers", "slack"].includes(a.id) || a.karma < 0 || a.prison) return null;
+  return jobProfile(jobTemplate(L)).game;
+}
+const CrimeGames = {
+  shoplift: ["catch", { target: "🛍️", title: "Grab it while nobody's looking" }],
+  porchPirate: ["catch", { target: "📦", title: "Snatch the packages" }],
+  pickpocket: ["catch", { target: "👛", title: "Lift the wallet" }],
+  burglary: ["timing", { verb: "Turn!", title: "Pick the lock", zone: 0.13 }],
+  carTheft: ["timing", { verb: "Spark!", title: "Hotwire the car", zone: 0.12 }],
+  trainRobbery: ["memory", { pads: ["🚂", "💰", "🧨", "🐎"], title: "Follow the plan" }],
+  bankRobbery: ["memory", { pads: ["🔫", "💰", "🚪", "🚗"], title: "Follow the plan" }],
+};
+
+/// How your current job shapes your life, in plain words.
+function jobEffects(L) {
+  const j = L.job, p = jobProfile(jobTemplate(L));
+  const e = [];
+  const hours = jobHours(L);
+  if (j.stress >= 55 || p.stress >= 70) e.push("😫 High stress drags your happiness down, and very high stress hurts your health.");
+  if (p.physical >= 60) e.push("💪 Physical work keeps you fit, until about 50, when it starts wearing you down.");
+  else if (p.physical <= 15) e.push("🪑 A desk job: after 35, your health slips unless you hit the gym.");
+  if (p.shift === "night" || p.shift === "rotating") e.push("🌙 Night and rotating shifts wear down your health and mood.");
+  if (hours >= 48) e.push(`⏰ ${hours} hours a week: your partner and kids see less of you.`);
+  if (p.away) e.push("🧳 Time away from home strains your relationships.");
+  if (j.remote) e.push("🏠 Working from home: no commute and a happier you.");
+  else if (j.commute >= 40) e.push(`🚗 A ${j.commute}-minute commute drags your mood.`);
+  if (p.danger) e.push("⚠️ You can get hurt on the job. Overtime makes it likelier.");
+  e.push(j.benefits.health ? "🩺 Health insurance: doctors and treatment cost 70% less." : "🩺 No health insurance: you pay full price for medical care.");
+  if (j.benefits.match) e.push(`💰 The company adds ${j.benefits.match}% of your salary to your 401(k) every year.`);
+  if (j.benefits.pension) e.push("🏛️ A government pension when you retire, and protection from layoffs.");
+  else e.push("📉 In a recession, you could be laid off. Strong performance helps.");
+  return e;
+}
+
 function matureToggleRow() {
   const on = !!store.settings.mature;
   return row("🔞", `Mature Mode: ${on ? "On" : "Off"}`, on ? "Drinking, drugs and sex for adult characters" : "Adds drinking, drugs and sex (18+ only)", () => setMature(!on), { right: on ? "Turn off" : "Turn on" });
@@ -185,7 +226,7 @@ function renderStart() {
     </div>
     ${renderCreateLook()}
     <button class="btn primary big-start" data-h="${h(() => { readForm(); startLife(f.first, f.last, f.gender, formLook()); })}">Start this life</button>
-    ${section("Settings", matureToggleRow())}
+    ${section("Settings", matureToggleRow() + minigameToggleRow())}
     ${grave}
   </div></div>`;
 }
@@ -315,7 +356,7 @@ function renderCareer(L) {
   if (school) {
     const g = L.enrollment ? L.enrollment.grades : L.schoolGrades;
     edu += lv("Attending", esc(school)) + lv("Grades", `${gradeLetter(g)} (${g}%)`);
-    edu += row("📝", "Study harder", "Improve your grades", () => act(studyHarder));
+    edu += row("📝", "Study harder", "🎮 Quiz yourself to raise your grades", () => withMinigame("math", { title: "Study session", emoji: "📝", level: L.age < 11 ? 1 : L.age < 16 ? 2 : 3 }, studyHarder));
     if (inGradeSchool(L)) {
       edu += lv("Popularity", `${L.popularity}%`);
       if (L.clubs.length) edu += lv("Clubs", esc(L.clubs.join(", ")));
@@ -335,11 +376,21 @@ function renderCareer(L) {
 
   // Current job
   if (L.job) {
-    const j = L.job;
+    const j = normalizeJob(L);
     const t = jobTemplate(L);
-    let cur = lv("Title", esc(j.title)) + lv("Company", esc(j.company)) + lv("Salary", `${formatMoney(j.salary)}/yr`) + lv("Years", `${j.years} (${j.yearsInLevel} in this role)`);
-    cur += `<div class="pad">${statBar("Performance", "📊", j.performance)}${L.fame > 0 ? statBar("Fame", "⭐", L.fame) : ""}</div>`;
-    html += section("Current job", cur);
+    const p = jobProfile(t);
+    const b = j.benefits;
+    let cur = lv("Title", esc(j.title)) + lv("Company", esc(j.company)) + lv("Salary", `${formatMoney(j.salary)}/yr${p.hourly ? " (hourly)" : ""}`) + lv("Years", `${j.years} (${j.yearsInLevel} in this role)`)
+      + lv("Hours", `${jobHours(L)} hours a week`) + lv("Schedule", ShiftNames[p.shift]) + lv("Commute", j.remote ? "Works from home" : `${j.commute} minutes each way`)
+      + lv("Boss", `${esc(j.boss.name)} · ${BossStyles[j.boss.style][0]}`) + lv("Vacation", j.vacationDays ? `${j.vacationLeft} of ${j.vacationDays} days left` : "None paid")
+      + lv("Benefits", [b.health ? "🩺 Health insurance" : "No health insurance", b.match ? `💰 ${b.match}% 401(k) match` : "", b.pension ? "🏛️ Pension" : ""].filter(Boolean).join(" · "));
+    if (j.lastReview) cur += lv("Last review", `${j.lastReview.rating}${j.lastReview.raise ? ` · +${formatMoney(j.lastReview.raise)}` : ""}`, j.warnings ? "red" : "");
+    if (j.warnings) cur += lv("Warnings", `${j.warnings} of 3`, "red");
+    cur += `<div class="pad">${statBar("Performance", "📊", j.performance)}${statBar("Stress", "😫", j.stress)}${statBar("Satisfaction", "🙂", j.satisfaction)}${statBar("Boss", "🧑‍💼", j.boss.bond)}${L.fame > 0 ? statBar("Fame", "⭐", L.fame) : ""}</div>`;
+    html += section("Current job", cur, BossStyles[j.boss.style][1]);
+    html += section("Work-life balance", settingRow("Hours", Object.entries(HoursModes).map(([id, m]) => [id, m[0]]), j.hoursMode, (v) => setAndSave(() => setHoursMode(L, v)))
+      + `<div class="pad effects">${jobEffects(L).map((e) => `<div>${esc(e)}</div>`).join("")}</div>`,
+      p.hourly ? "Overtime pays time-and-a-half here, but it adds stress." : "Overtime raises your performance and your stress. Coasting does the opposite.");
 
     if (hasCareerPath(t)) {
       const ladder = currentLadder(L);
@@ -361,8 +412,13 @@ function renderCareer(L) {
 
     let work = availableJobActions(L).map((a) => {
       const used = hasUsedAction(L, a);
-      return row(a.emoji, a.title, used ? "Done this year" : null, () => act((x) => performJobAction(x, a)), { disabled: used });
+      const game = jobGameFor(L, a);
+      const run = game ? () => withMinigame(game[0], { ...game[1], title: game[1].title || a.title, emoji: a.emoji }, (x) => performJobAction(x, a)) : () => act((x) => performJobAction(x, a));
+      return row(a.emoji, a.title, used ? "Done this year" : game ? `🎮 ${game[1].title || "Mini-game"}` : null, run, { disabled: used });
     }).join("");
+    work += row("🧑‍💼", "One-on-one with your boss", j.usedActions.includes("boss") ? "Done this year" : "Build the relationship", () => act(talkToBoss), { disabled: j.usedActions.includes("boss") });
+    work += row("🏖️", "Take vacation days", j.vacationLeft ? `${j.vacationLeft} days left · lowers stress` : "No paid days left", () => act(takeVacationDays), { disabled: !j.vacationLeft });
+    work += row("🤒", "Call in sick", j.usedActions.includes("sick") ? "Done this year" : "A day off, if your boss buys it", () => act(callInSick), { disabled: j.usedActions.includes("sick") });
     const ladder = currentLadder(L);
     if (!mustChooseTrack(L) && j.level < ladder.length - 1) work += row("🪜", "Ask for a promotion", `Next: ${ladder[j.level + 1]}`, () => act(askForPromotion));
     work += row("💵", "Ask for a raise", null, () => act(askForRaise));
@@ -372,7 +428,9 @@ function renderCareer(L) {
     ]), { danger: true });
     html += section("At work", work, "Each work action can be done once per year. Risky ones can get you fired, hurt or arrested.");
   } else if (L.isRetired) {
-    html += section("Retirement", lv("Pension", `${formatMoney(L.pension)}/yr`));
+    html += section("Retirement", lv("Pension", `${formatMoney(L.pension)}/yr`) + (L.retirement401k ? lv("401(k)", formatMoney(Math.round(L.retirement401k))) + row("💰", "Cash out your 401(k)", "Taxed as income", () => act(withdraw401k)) : ""));
+  } else if (L.unemployment) {
+    html += section("Unemployed", lv("Unemployment benefits", `${formatMoney(L.unemployment.amount)}/yr`) + lv("Remaining", plural(L.unemployment.years, "year")), "Benefits stop as soon as you take a new job.");
   }
 
   // Gigs
@@ -389,8 +447,18 @@ function renderCareer(L) {
       const t = o.template;
       const ok = meetsRequirements(L, t);
       const tags = (t.partTime ? " (Part-time)" : "") + (t.famous ? " ⭐" : "") + (t.military ? " 🪖" : "");
-      return row("", entryTitle(t) + tags, o.company, () => act((x) => applyForJob(x, o)), {
-        extra: `${hasCareerPath(t) ? `<div class="row-sub">Career path up to ${esc(topTitle(t))}</div>` : ""}<div class="row-sub ${ok ? "" : "red"}">${esc(requirementText(t))}</div>`,
+      const p = jobProfile(t);
+      const d = o.details || openingDetails(t);
+      const facts = `${p.hours} h/wk · ${ShiftNames[p.shift]} · ${stressWord(p.stress)} · ${d.remote ? "🏠 Remote" : `🚗 ${d.commute} min`}${d.health ? " · 🩺" : ""}${d.match ? ` · 💰 ${d.match}%` : ""}${d.pension ? " · 🏛️" : ""}`;
+      const apply = () => {
+        if (!ok) { act((x) => applyForJob(x, o)); return; }
+        choose(`${entryTitle(t)} at ${o.company}`, `${formatMoney(o.salary)} a year${p.hourly ? " (hourly)" : ""} · ${p.hours} hours a week · ${ShiftNames[p.shift].toLowerCase()}\n${stressWord(p.stress)} · ${p.physical >= 60 ? "physically demanding" : p.physical <= 15 ? "desk job" : "some physical work"}${p.danger ? " · risk of injury" : ""}\n${d.remote ? "Remote" : `${d.commute}-minute commute`} · ${d.health ? "health insurance" : "no health insurance"}${d.match ? ` · ${d.match}% 401(k) match` : ""}${d.pension ? " · pension" : ""} · ${d.vacation} vacation days`, [
+          { label: "🤝 Go to the interview", fn: () => withMinigame("interview", { title: `Interview at ${o.company}`, emoji: "🤝", count: t.partTime ? 2 : 3 }, (x) => applyForJob(x, o)) },
+          { label: "Cancel", secondary: true, fn: () => {} },
+        ]);
+      };
+      return row("", entryTitle(t) + tags, o.company, apply, {
+        extra: `${hasCareerPath(t) ? `<div class="row-sub">Career path up to ${esc(topTitle(t))}</div>` : ""}<div class="row-sub">${esc(facts)}</div><div class="row-sub ${ok ? "" : "red"}">${esc(!ok && t.partTime && L.age >= 18 ? "Part-time jobs are for students, or if you have no other job" : requirementText(t))}</div>`,
         right: `<span class="money-pos">${formatMoney(o.salary)}</span>`,
       });
     }).join("").replaceAll('<span class="row-emoji"></span>', "");
@@ -448,6 +516,7 @@ function renderPeople(L) {
     ["Love", (p) => isRomantic(p.kind)],
     ["Children", (p) => p.kind === "child"],
     ["Friends", (p) => p.kind === "friend"],
+    ["Work", (p) => p.kind === "coworker"],
     ["School", (p) => p.kind === "classmate" || p.kind === "teacher"],
     ["Exes", (p) => p.kind === "ex"],
     ["Pets", (p) => p.kind === "pet"],
@@ -584,7 +653,9 @@ function renderActivities(L) {
 
   html += section("Crime", Crimes.map((c) => {
     const ok = L.age >= c.minAge;
-    return row(c.emoji, c.title, ok ? `Risky · ${Math.round(c.catchChance * 100)}% chance of getting caught` : `Available at ${c.minAge}`, () => act((x) => commitCrime(x, c.id)), { disabled: !ok });
+    const game = CrimeGames[c.id];
+    const run = game ? () => withMinigame(game[0], { ...game[1], emoji: c.emoji }, (x) => commitCrime(x, c.id)) : () => act((x) => commitCrime(x, c.id));
+    return row(c.emoji, c.title, ok ? `${game ? "🎮 " : ""}Risky · ${Math.round(c.catchChance * 100)}% chance of getting caught` : `Available at ${c.minAge}`, run, { disabled: !ok });
   }).join(""), "Crime pays... until it doesn't. Adults who get caught go to prison.");
   if (L.criminalRecord.length) html += section("Criminal record", L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   return html;
@@ -594,7 +665,8 @@ function activitySection(L, title, ids) {
   return section(title, ids.map((id) => {
     const [t, e, sub, min] = Activities[id];
     const ok = canDoActivity(L, id);
-    return row(e, t, ok ? sub : `Available at ${min}`, () => act((x) => performActivity(x, id)), { disabled: !ok });
+    const run = id === "gym" ? () => withMinigame("timing", { title: "Hit your reps", verb: "Lift!", emoji: "🏋️", hint: "Lift when the bar is in the green zone." }, (x) => performActivity(x, id)) : () => act((x) => performActivity(x, id));
+    return row(e, t, ok ? (id === "gym" ? `🎮 ${sub}` : sub) : `Available at ${min}`, run, { disabled: !ok });
   }).join(""));
 }
 
@@ -628,7 +700,7 @@ function renderProfile(L) {
   if (L.criminalRecord.length || inPrison(L)) {
     html += section("Criminal record", (inPrison(L) ? lv("In prison", `${plural(L.prisonYearsLeft, "year")} left`) : "") + L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   }
-  html += section("Settings", matureToggleRow());
+  html += section("Settings", matureToggleRow() + minigameToggleRow());
   html += section("Ribbon so far", (() => { const r = Ribbons[ribbonOf(L)]; return `<div class="pad">${r[1]} <b>${r[0]}</b> <span class="muted">· ${r[2]}</span></div>`; })(),
     "The ribbon you earn is decided when you die.");
   return html;
@@ -696,7 +768,7 @@ function renderModals(L) {
     const o = ui.outcome;
     const close = h(() => { ui.outcome = null; render(); });
     return card({
-      emoji: o.dead ? "☠️" : o.emoji || "📣", title: o.title, body: o.message, deltas: o.deltas, tone: o.dead ? "dark" : "result",
+      emoji: o.dead ? "☠️" : o.emoji || "📣", tag: o.tag, title: o.title, body: o.message, deltas: o.deltas, tone: o.dead ? "dark" : "result",
       buttons: `<button class="choice" data-h="${close}">${o.dead ? "See my life" : "OK"}</button>`,
     });
   }
@@ -734,6 +806,7 @@ function onClick(e) {
 }
 
 function onKey(e) {
+  if (MG.active) return;
   if (e.key === "Enter" && e.target.id === "name-input") { e.preventDefault(); document.querySelector("[data-name-ok]")?.click(); return; }
   if (e.target.closest("input, textarea, select")) return;
   if (store.life?.toName?.length) return;

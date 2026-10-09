@@ -7,6 +7,11 @@
 const rnd = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 const rndf = (a, b) => Math.random() * (b - a) + a;
 const roll = (p) => Math.random() < p;
+/// Like roll(), but when a mini-game was just played (L.mg, 0 to 1) skill decides most of it.
+function skillRoll(L, chance) {
+  if (L.mg == null) return roll(chance);
+  return roll(clamp(chance * 0.25 + L.mg * 0.85 - 0.08, 0.03, 0.98));
+}
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 const idiv = (a, b) => Math.trunc(a / b);
@@ -231,6 +236,7 @@ function relTitle(p) {
     case "friend": return "Friend";
     case "classmate": return "Classmate";
     case "teacher": return "Teacher";
+    case "coworker": return "Coworker";
     case "ex": return m ? "Ex-boyfriend" : "Ex-girlfriend";
   }
   return p.kind;
@@ -639,13 +645,15 @@ function progressPrison(L) {
 }
 
 function progressCareer(L) {
+  grow401k(L);
+  progressUnemployment(L);
   if (L.isRetired) { L.money += L.pension; return; }
   const j = L.job;
   if (!j) return;
   j.years += 1;
   j.yearsInLevel += 1;
   j.usedActions = [];
-  j.performance = clamp(j.performance + rnd(-10, 8) + idiv(L.stats.smarts - 50, 15), 0, 100);
+  j.performance = clamp(j.performance + rnd(-8, 6) + idiv(L.stats.smarts - 50, 15), 0, 100);
   L.money += Math.trunc(j.salary * 0.75);
   const loanPayment = Math.min(L.studentLoans, Math.trunc(j.salary * 0.1));
   if (loanPayment > 0) {
@@ -653,24 +661,15 @@ function progressCareer(L) {
     L.money -= loanPayment;
     if (L.studentLoans === 0) record(L, "I paid off my student loans!");
   }
-  if (j.performance < 15 && roll(0.5)) {
-    L.job = null;
-    notify(L, "❌", "Fired", `❌ I was fired from my job as a ${j.title} at ${j.company}.`);
-    adjust(L, { happiness: -15 });
-    return;
-  }
+  // Hours, stress, your boss, benefits, the annual review and layoffs (careers.js).
+  if (progressJob(L) === "gone") return;
   const top = currentLadder(L).length - 1;
   if (mustChooseTrack(L) && j.yearsInLevel === 1 && j.performance >= 50) {
     record(L, "🔀 I've earned the right to specialize. Time to choose my path at work.");
   }
-  if (j.performance > 75 && j.yearsInLevel >= 2 && j.level < top && roll(0.3)) {
+  if (j.performance > 75 && j.yearsInLevel >= 2 && j.level < top && roll(0.25 + (j.boss.bond - 50) / 250)) {
     popup(L, "📈", "Promoted!", promote(L));
     return;
-  }
-  if (j.performance > 70 && j.years >= 2 && j.salary < salaryCap(L) && roll(0.25)) {
-    j.salary = Math.min(salaryCap(L), j.salary + Math.trunc(j.salary * rndf(0.02, 0.05)));
-    record(L, `💵 I got a raise! My salary is now ${formatMoney(j.salary)}.`);
-    adjust(L, { happiness: 6 });
   }
 }
 

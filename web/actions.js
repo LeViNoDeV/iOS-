@@ -11,7 +11,7 @@ function performActivity(L, id) {
   const title = Activities[id][0];
   let m;
   switch (id) {
-    case "gym": { const g = rnd(1, 6); bump(L, "gym"); adjust(L, { happiness: 2, health: g, looks: rnd(0, 3) }); m = `I had a great workout at the gym. Health +${g}.`; break; }
+    case "gym": { const g = L.mg != null ? Math.round(L.mg * 7) : rnd(1, 6); bump(L, "gym"); adjust(L, { happiness: 2, health: g, looks: rnd(0, 3) }); m = `I had a great workout at the gym. Health +${g}.`; break; }
     case "library": { const g = rnd(1, 5); adjust(L, { happiness: 1, smarts: g }); m = `I read a fascinating book at the library. Smarts +${g}.`; break; }
     case "meditate": { const g = rnd(2, 7); adjust(L, { happiness: g, health: 1 }); m = `I meditated and found some inner peace. Happiness +${g}.`; break; }
     case "walk": adjust(L, { happiness: 2, health: 1 }); m = `I went for a relaxing walk around ${L.city}.`; break;
@@ -86,7 +86,7 @@ function commitCrime(L, crimeId) {
   const c = Crimes.find((x) => x.id === crimeId);
   L.karma -= 5;
   bump(L, "crimes");
-  if (roll(c.catchChance)) {
+  if (!skillRoll(L, 1 - c.catchChance)) {
     const years = rnd(c.sentence[0], c.sentence[1]);
     L.criminalRecord.push(c.title);
     if (L.age < 18) {
@@ -143,10 +143,11 @@ function prisonAction(L, id) {
 // MARK: School
 
 function studyHarder(L) {
-  if (L.enrollment) L.enrollment.grades = Math.min(100, L.enrollment.grades + rnd(3, 8));
-  else L.schoolGrades = Math.min(100, L.schoolGrades + rnd(3, 8));
-  adjust(L, { happiness: -2, smarts: rnd(1, 3) });
-  return out(L, "School", "I studied harder at school.");
+  const gain = L.mg != null ? Math.round(L.mg * 10) : rnd(3, 8);
+  if (L.enrollment) L.enrollment.grades = Math.min(100, L.enrollment.grades + gain);
+  else L.schoolGrades = Math.min(100, L.schoolGrades + gain);
+  adjust(L, { happiness: -2, smarts: L.mg != null ? Math.round(L.mg * 3) : rnd(1, 3) });
+  return out(L, "School", L.mg == null ? "I studied harder at school." : L.mg >= 0.8 ? `📝 I aced my practice quiz. Grades +${gain}.` : L.mg >= 0.4 ? `📝 I studied and it's starting to click. Grades +${gain}.` : "📝 I studied, but nothing stuck.");
 }
 
 function dropOut(L) {
@@ -219,7 +220,7 @@ function meetsRequirements(L, t) {
 function jobListings(L) {
   return jobCatalog.map(tpl)
     .filter((t) => t.minAge <= Math.max(L.age, 14) && (L.age >= 18 || t.partTime))
-    .map((t) => ({ id: uid(), template: t, company: pick(companyNames), salary: idiv(Math.trunc(t.baseSalary * rndf(0.85, 1.2)), 100) * 100 }));
+    .map((t) => ({ id: uid(), template: t, company: pick(companyNames), salary: idiv(Math.trunc(t.baseSalary * rndf(0.85, 1.2)), 100) * 100, details: openingDetails(t) }));
 }
 
 function applyForJob(L, opening) {
@@ -234,17 +235,22 @@ function applyForJob(L, opening) {
   let referral = "";
   const bf = bestFriend(L);
   if (bf && bf.salary > 0 && !t.partTime) { chance += 0.15; referral = ` My best friend ${bf.firstName} put in a good word for me.`; }
-  if (!roll(clamp(chance, 0.05, 0.95))) {
+  const interview = L.mg != null ? (L.mg >= 0.8 ? " The interview went great." : L.mg >= 0.5 ? "" : " The interview didn't go well.") : "";
+  if (!skillRoll(L, clamp(chance, 0.05, 0.95))) {
     adjust(L, { happiness: -3 });
-    return out(L, "Rejected", `I interviewed for the ${entryTitle(t)} position at ${opening.company}, but they didn't hire me.`);
+    return out(L, "Rejected", `I interviewed for the ${entryTitle(t)} position at ${opening.company}, but they didn't hire me.${interview}`);
   }
-  if (L.job) record(L, `I quit my job as a ${L.job.title}.`);
+  if (L.job) { record(L, `I quit my job as a ${L.job.title}.`); leaveCoworkers(L); }
   L.job = {
     templateID: t.id, title: entryTitle(t), company: opening.company, salary: opening.salary, baseSalary: opening.salary,
-    years: 0, performance: 50, partTime: t.partTime, level: 0, yearsInLevel: 0, track: null, usedActions: [],
+    years: 0, performance: L.mg != null ? Math.round(40 + L.mg * 25) : 50, partTime: t.partTime, level: 0, yearsInLevel: 0, track: null, usedActions: [],
   };
+  normalizeJob(L, opening.details);
+  if (!t.partTime) meetCoworkers(L);
   L.isRetired = false;
+  L.unemployment = null;
   adjust(L, { happiness: 10 });
+  referral += interview;
   return out(L, "Hired!", `🎉 I got hired as a ${entryTitle(t)} at ${opening.company} for ${formatMoney(opening.salary)}/yr!${referral}`);
 }
 
@@ -256,7 +262,7 @@ function askForRaise(L) {
   if (j.salary >= salaryCap(L)) {
     return out(L, "Raise", `My boss said I'm already at the top of the pay range for a ${j.title}. I'd need a promotion to earn more.`);
   }
-  if (roll(j.performance / 130)) {
+  if (roll(j.performance / 130 + ((j.boss?.bond ?? 50) - 50) / 250)) {
     const raise = Math.min(salaryCap(L) - j.salary, Math.trunc(j.salary * rndf(0.03, 0.07)));
     j.salary += raise;
     adjust(L, { happiness: 8 });
@@ -270,6 +276,7 @@ function askForRaise(L) {
 function quitJob(L) {
   if (!L.job) return out(L, "Quit", "I don't have a job.", false);
   const j = L.job;
+  leaveCoworkers(L);
   L.job = null;
   return out(L, "Quit", `I quit my job as a ${j.title} at ${j.company}.`);
 }
@@ -279,11 +286,15 @@ const canRetire = (L) => L.age >= 60 && L.job && !L.job.partTime;
 function retire(L) {
   const j = L.job;
   if (!j) return out(L, "Retire", "I don't have a job.", false);
-  L.pension = Math.trunc(j.salary * Math.min(0.6, 0.02 * j.years));
+  normalizeJob(L);
+  // Government jobs pay a real pension; everyone else gets a basic state pension plus their 401(k).
+  L.pension = Math.trunc(j.salary * (j.benefits.pension ? Math.min(0.6, 0.02 * j.years) : Math.min(0.25, 0.006 * j.years)));
+  const nest = Math.round(L.retirement401k || 0);
+  leaveCoworkers(L);
   L.job = null;
   L.isRetired = true;
   adjust(L, { happiness: 15 });
-  return out(L, "Retired", `🎉 I retired from my career as a ${j.title}. My pension is ${formatMoney(L.pension)}/yr.`);
+  return out(L, "Retired", `🎉 I retired from my career as a ${j.title}. My pension is ${formatMoney(L.pension)}/yr.${nest ? ` My 401(k) holds ${formatMoney(nest)}.` : ""}`);
 }
 
 // MARK: Careers: work actions, promotions, specializations
@@ -307,7 +318,7 @@ function performJobAction(L, a) {
   const skill = (L.stats.smarts + L.stats.health + L.stats.happiness) / 600 - 0.25;
   const chance = clamp(a.successChance + skill + j.level * 0.02, 0.05, 0.95);
   let m;
-  if (roll(chance)) {
+  if (skillRoll(L, chance)) {
     j.performance = clamp(j.performance + a.performance, 0, 100);
     adjust(L, { happiness: a.happiness });
     L.fame = clamp(L.fame + Math.round(a.fame * 0.6 * Math.pow(Math.max(0, 1 - L.fame / 100), 2)), 0, 100);
@@ -330,6 +341,7 @@ function performJobAction(L, a) {
       record(L, `🚔 I was sentenced to ${plural(years, "year")} in prison.`);
       return { title: a.title, message: `${m} I was sentenced to ${plural(years, "year")} in prison.` };
     } else if (a.firedRisk > 0 && roll(a.firedRisk)) {
+      leaveCoworkers(L);
       L.job = null;
       adjust(L, { happiness: -10 });
       m += " I was fired!";
@@ -364,7 +376,7 @@ function askForPromotion(L) {
   if (j.usedActions.includes("promotion")) return out(L, "Promotion", "I already asked for a promotion this year.", false);
   j.usedActions.push("promotion");
   const chance = (j.performance - 40) / 80 + (j.yearsInLevel >= 2 ? 0.15 : -0.2);
-  if (j.performance >= 60 && j.yearsInLevel >= 1 && roll(chance)) return { title: "Promotion", message: promote(L) };
+  if (j.performance >= 60 && j.yearsInLevel >= 1 && roll(chance + ((j.boss?.bond ?? 50) - 50) / 200)) return { title: "Promotion", message: promote(L) };
   j.performance = Math.max(0, j.performance - 5);
   adjust(L, { happiness: -5 });
   return out(L, "Promotion", j.yearsInLevel < 1 ? "My boss said I need more time in my current role first." : "My boss turned down my request for a promotion.");
@@ -402,7 +414,7 @@ function doGig(L, g) {
 }
 
 function treat(L, t) {
-  L.money -= t.cost;
+  L.money -= hasHealthInsurance(L) ? Math.round(t.cost * 0.3) : t.cost;
   if (t.id === "therapist") {
     adjust(L, { happiness: rnd(5, 12) });
     if (L.illnesses.includes("depression") && roll(0.5)) {

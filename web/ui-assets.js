@@ -15,6 +15,8 @@ function renderAssets(L) {
   if (L.job) fin += lv("Salary (after tax)", `${formatMoney(Math.trunc(L.job.salary * 0.75))}/yr`);
   if (spouseContribution(L) > 0) fin += lv("Spouse contributes", `+${formatMoney(spouseContribution(L))}/yr`, "money-pos");
   if (childExpenses(L) > 0) fin += lv("Child expenses", `-${formatMoney(childExpenses(L))}/yr`, "money-neg");
+  if (L.retirement401k) fin += lv("401(k) retirement savings", formatMoney(Math.round(L.retirement401k))) + row("💰", "Cash out your 401(k)", L.age < 60 ? "Before 60 you pay a 10% penalty on top of tax" : "Taxed as income", () => act(withdraw401k));
+  if (L.unemployment) fin += lv("Unemployment benefits", `+${formatMoney(L.unemployment.amount)}/yr`, "money-pos");
   const yearly = L.assets.reduce((s, a) => {
     if (isHome(a)) { const c = homeYearlyCosts(a); return s + c.tax + c.insurance + c.upkeep + (a.loan ? a.payment : 0) - (a.rented ? homeRent(a) : 0); }
     return s + vehicleUpkeep(a) + crewCost(a) + (a.loan ? a.payment : 0);
@@ -211,6 +213,16 @@ function renderVehicle(L, view) {
 
 // MARK: Licenses
 
+const LicenseGames = {
+  driver: ["timing", { verb: "Stop!", title: "Parallel park", hint: "Stop the car inside the space. Three tries." }],
+  motorcycle: ["timing", { verb: "Lean!", title: "Ride the cone slalom" }],
+  boating: ["timing", { verb: "Dock!", title: "Dock the boat" }],
+  captain: ["memory", { pads: ["🔴", "🟢", "⚓", "🧭"], title: "Plot the course past the buoys" }],
+  pilot: ["timing", { verb: "Flare!", title: "Land the plane", zone: 0.13 }],
+  jet: ["timing", { verb: "Flare!", title: "Land the jet in the simulator", zone: 0.11 }],
+  helicopter: ["timing", { verb: "Hover!", title: "Hold a steady hover", zone: 0.12 }],
+};
+
 function licenseStatusText(L, id) {
   const lic = Licenses[id];
   if (hasLicense(L, id)) return "✅ Licensed";
@@ -245,7 +257,8 @@ function renderLicense(L, view) {
     const blocked = licenseBlockers(L, view.id);
     let acts = row("📚", t.label, trainDone ? (t.max ? "You've had all the practice you need" : "Done this year") : tooYoung ? `From age ${Math.max(lic.minAge - 1, 15)}` : `${t.cost > 0 ? formatMoney(t.cost) : `Earn ${formatMoney(-t.cost)}`} · ${t.sub}`,
       () => act((x) => licenseTrain(x, view.id)), { disabled: trainDone || tooYoung || inPrison(L) || (lic.requires && !hasLicense(L, lic.requires)) });
-    acts += row("📝", "Take the test", blocked.length ? blocked.join(" · ") : `${formatMoney(lic.fee)}`, () => act((x) => takeLicenseTest(x, view.id)), { disabled: blocked.length > 0 });
+    const game = LicenseGames[view.id];
+    acts += row("📝", "Take the test", blocked.length ? blocked.join(" · ") : `${formatMoney(lic.fee)} · 🎮 ${game[1].title}`, () => withMinigame(game[0], { ...game[1], emoji: lic.emoji }, (x) => takeLicenseTest(x, view.id)), { disabled: blocked.length > 0 });
     html += section("Get it", acts);
   }
   return html;
