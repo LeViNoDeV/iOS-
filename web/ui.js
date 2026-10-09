@@ -4,7 +4,7 @@
 const SAVE_KEY = "lifesim-save-v1";
 const store = { life: null, graveyard: [], settings: { mature: true } };
 const ui = {
-  tab: "career", stack: [], outcome: null, choice: null, openings: null, bet: 1000,
+  tab: "occupation", stack: [], sheetOpen: false, outcome: null, choice: null, openings: null, bet: 1000,
   form: { first: "", last: "", gender: "male" }, lastAgeShown: -1,
 };
 let handlers = [];
@@ -105,11 +105,12 @@ function askProtection(title, run) {
 }
 
 function startLife(first, last, gender, look) {
+  ui.startView = null;
   store.life = newLife(first, last, gender);
   if (look) applyChosenLook(store.life, look);
   store.life.mature = !!store.settings.mature;
   store.life.protection = true;
-  ui.tab = "career"; ui.stack = []; ui.outcome = null; ui.choice = null; ui.openings = null;
+  ui.tab = "occupation"; ui.stack = []; ui.outcome = null; ui.choice = null; ui.openings = null;
   save();
   render(true);
 }
@@ -130,7 +131,12 @@ function render(scrollLog = false) {
   html += renderModals(L);
   app.innerHTML = html;
   const side = app.querySelector(".side-body");
-  if (side) side.scrollTop = sideScroll;
+  const top = ui.stack[ui.stack.length - 1];
+  const viewKey = `${store.life ? "game" : ui.startView || "start"}|${ui.tab}|${ui.sheetOpen}|${ui.stack.length}|${top ? top.type + (top.id || top.group || "") : ""}`;
+  if (side) side.scrollTop = viewKey === ui.lastViewKey ? sideScroll : 0;
+  ui.lastViewKey = viewKey;
+  ui.sheetAnim = false;
+  ui.lastMode = store.life ? layoutMode() : null;
   const log = app.querySelector(".log");
   if (log) log.scrollTop = scrollLog || ui.lastAgeShown !== L?.age ? log.scrollHeight : logScroll;
   ui.lastAgeShown = L?.age ?? -1;
@@ -202,33 +208,50 @@ function matureToggleRow() {
 
 function renderStart() {
   const f = ui.form;
-  const grave = store.graveyard.length
-    ? section("Graveyard", store.graveyard.slice(0, 30).map((g) => {
-      const r = Ribbons[g.ribbon] || Ribbons.average;
-      return `<div class="row" style="cursor:default"><span class="row-emoji">${r[1]}</span><span class="row-main"><span class="row-title">${esc(g.name)}${(g.generation || 1) > 1 ? ` <span class="muted">· Gen ${g.generation}</span>` : ""}</span>
-        <div class="row-sub">Died at ${g.ageAtDeath} from ${esc(g.causeOfDeath)} · ${r[0]} ribbon</div></span><span class="row-right">${formatMoney(g.netWorth)}</span></div>`;
-    }).join(""))
-    : "";
-  return `<div class="center-wrap"><div class="card">
-    <div class="brand"><h1>LifeSim</h1><p>Live a whole life, one year at a time.</p></div>
-    ${store.settings.mature ? `<p class="muted" style="margin:0;font-size:13px">🔞 For players 18+. Mature Mode is on: adult characters can drink, do drugs and have (non-explicit) sex. You can turn it off under Settings below.</p>` : ""}
-    <button class="age-btn big-go" data-h="${h(() => startLife())}">🎲 Start a random life</button>
-    <button class="btn" data-h="${h(chooseRoyalStart)}">👑 Be born royal</button>
-    <div class="sec"><div class="sec-title"><span>Or make your own</span></div>
+  if (ui.startView === "create") {
+    return `<div class="center-wrap"><div class="card start-card">
+      <div class="start-head"><button class="sheet-back" aria-label="Back" data-h="${h(() => { readForm(); ui.startView = null; render(); })}">‹</button><h2>Create your character</h2></div>
       <div class="fields">
         <div class="field"><label for="f-first">First name</label><input id="f-first" value="${esc(f.first)}" placeholder="Random" autocomplete="off"></div>
         <div class="field"><label for="f-last">Last name</label><input id="f-last" value="${esc(f.last)}" placeholder="Random" autocomplete="off"></div>
       </div>
       <div class="seg" role="group" aria-label="Gender">
-        <button class="btn" aria-pressed="${f.gender === "male"}" data-h="${h(() => { readForm(); f.gender = "male"; render(); })}">Male</button>
-        <button class="btn" aria-pressed="${f.gender === "female"}" data-h="${h(() => { readForm(); f.gender = "female"; render(); })}">Female</button>
+        <button class="btn" aria-pressed="${f.gender === "male"}" data-h="${h(() => { readForm(); setFormGender("male"); })}">♂ Male</button>
+        <button class="btn" aria-pressed="${f.gender === "female"}" data-h="${h(() => { readForm(); setFormGender("female"); })}">♀ Female</button>
       </div>
-    </div>
-    ${renderCreateLook()}
-    <button class="btn primary big-start" data-h="${h(() => { readForm(); startLife(f.first, f.last, f.gender, formLook()); })}">Start this life</button>
-    ${section("Settings", matureToggleRow() + minigameToggleRow())}
-    ${grave}
+      ${renderCreateLook()}
+      <div class="sticky-start"><button class="age-btn" data-h="${h(() => { readForm(); startLife(f.first, f.last, f.gender, formLook()); })}">Start this life</button></div>
+    </div></div>`;
+  }
+  if (ui.startView === "graveyard") {
+    return `<div class="center-wrap"><div class="card start-card">
+      <div class="start-head"><button class="sheet-back" aria-label="Back" data-h="${h(() => { ui.startView = null; render(); })}">‹</button><h2>Graveyard</h2></div>
+      ${section("Past lives", store.graveyard.slice(0, 50).map((g) => {
+        const r = Ribbons[g.ribbon] || Ribbons.average;
+        return `<div class="row" style="cursor:default"><span class="row-emoji">${r[1]}</span><span class="row-main"><span class="row-title">${esc(g.name)}${(g.generation || 1) > 1 ? ` <span class="muted">· Gen ${g.generation}</span>` : ""}</span>
+          <div class="row-sub">Died at ${g.ageAtDeath} from ${esc(g.causeOfDeath)} · ${r[0]} ribbon</div></span><span class="row-right">${formatMoney(g.netWorth)}</span></div>`;
+      }).join("") || `<div class="pad muted">No one has died yet.</div>`)}
+    </div></div>`;
+  }
+  return `<div class="center-wrap"><div class="card start-card">
+    <div class="brand"><h1>LifeSim</h1><p>Live a whole life, one year at a time.</p></div>
+    <button class="age-btn big-go" data-h="${h(() => startLife())}">🎲 Random life</button>
+    ${tiles([
+      tile("✏️", "Create", "Name, gender, looks", () => { ui.startView = "create"; render(); }),
+      tile("👑", "Be Royal", "25 monarchies", chooseRoyalStart),
+      tile("🪦", "Graveyard", store.graveyard.length ? `${store.graveyard.length} past lives` : "Empty", () => { ui.startView = "graveyard"; render(); }),
+    ])}
+    ${section("Settings", layoutRow() + matureToggleRow() + minigameToggleRow())}
+    ${store.settings.mature ? `<p class="muted small" style="margin:0">🔞 For players 18+. Mature Mode adds drinking, drugs and (non-explicit) sex for adult characters.</p>` : ""}
   </div></div>`;
+}
+/// Switching gender keeps your genes but picks a fitting hairstyle (and drops the beard).
+function setFormGender(g) {
+  if (ui.form.gender === g) return;
+  ui.form.gender = g;
+  const look = formLook();
+  ui.form.look = { ...look, hair: styleFor(g, 30, look.texture), facial: g === "female" ? "none" : look.facial };
+  render();
 }
 function readForm() {
   ui.form.first = document.getElementById("f-first")?.value ?? ui.form.first;
@@ -255,7 +278,7 @@ function renderDeath(L) {
       ${lv("Generation", L.generation)}
     </div>
     ${heirs.length ? section("Continue as your child", heirs.map((c) => row(relEmoji(c), relName(c), `${relTitle(c)} · Age ${c.age}`, () => {
-      store.life = continueAs(L, c); store.life.mature = !!store.settings.mature; store.life.protection = true; ui.stack = []; ui.tab = "career"; ui.openings = null; save(); render(true);
+      store.life = continueAs(L, c); store.life.mature = !!store.settings.mature; store.life.protection = true; ui.stack = []; ui.tab = "occupation"; ui.openings = null; save(); render(true);
     }, { chev: true })).join(""), "Your money is split between your living children.") : ""}
     ${snapshotsFor(L).length ? section("⏳ Time Machine", timeMachineRows(L), "Not ready to go? Go back in time and live it differently.") : ""}
     <button class="age-btn" data-h="${h(() => { store.life = null; save(); render(); })}">Start a new life</button>
@@ -275,6 +298,7 @@ function subtitleOf(L) {
 }
 
 function renderGame(L) {
+  const mode = layoutMode();
   const s = L.stats;
   const chips = [];
   chips.push(`<span class="chip">📍 ${esc(L.city)}</span>`);
@@ -286,53 +310,99 @@ function renderGame(L) {
   if (inPrison(L)) chips.push(`<span class="chip bad">🔒 In prison</span>`);
   if (L.fugitive && !inPrison(L)) chips.push(`<span class="chip bad">🏃 Fugitive</span>`);
   if (L.mob) chips.push(`<span class="chip">🕴️ ${esc(MobRanks[L.mob.rank])}</span>`);
-  if (L.mature) chips.push(`<span class="chip">🔞 Mature</span>`);
-  if (L.pregnancy) chips.push(`<span class="chip warn">🤰 ${L.pregnancy.carrier === "me" ? "Pregnant" : `${esc(L.pregnancy.partnerName)} is pregnant`} · due next year</span>`);
+  if (L.pregnancy) chips.push(`<span class="chip warn">🤰 ${L.pregnancy.carrier === "me" ? "Pregnant" : `${esc(L.pregnancy.partnerName)} is pregnant`}</span>`);
 
   const blocked = L.pendingEvents.length > 0 || (L.popups || []).length > 0;
-  const tabs = [["career", "💼", inPrison(L) ? "Prison" : "Career"], ["assets", "🏠", "Money"], ["people", "❤️", "People"], ["activities", "🎯", "Activities"], ["packs", "🎁", "Packs"], ["profile", "🪪", "Profile"], ["god", "⚡", "God"]];
-
-  return `<div class="game">
-    <aside class="pane me" aria-label="You">
-      <div class="who"><div class="avatar" aria-hidden="true">${lifeEmoji(L)}</div>
-        <div style="min-width:0"><div class="who-name">${esc(fullName(L))}</div><div class="who-sub">${esc(subtitleOf(L))}</div></div></div>
-      <div class="age-row"><div><div class="age-cap">Age</div><div class="age-num">${L.age}</div></div>
-        <div class="money"><div class="age-cap">Bank</div><b class="${L.money < 0 ? "neg" : "pos"}">${formatMoney(L.money)}</b></div></div>
-      <div class="age-dock"><button class="age-btn" ${blocked ? "disabled" : ""} data-h="${h(ageUpNow)}">＋ Age up <span class="kbd">Space</span></button></div>
-      <div class="stats">
-        ${statBar("Happiness", "😊", s.happiness)}${statBar("Health", "❤️", s.health)}${statBar("Smarts", "🧠", s.smarts)}${statBar("Looks", "✨", s.looks)}
-      </div>
-      <div class="chips">${chips.join("")}</div>
-      <div class="me-foot">${button("New life", () => choose("Start a new life?", `${fullName(L)} will be sent to the graveyard.`, [
-        { label: "Abandon this life", danger: true, fn: () => { L.causeOfDeath = "unknown causes"; store.graveyard.unshift(summaryOf(L)); store.life = null; save(); } },
-        { label: "Keep playing", secondary: true, fn: () => {} },
-      ]), "small danger")}</div>
-    </aside>
-
-    <section class="pane story" aria-label="Your life story">
-      <div class="story-head"><h2>Your story</h2><span>${plural(L.log.length, "year")} lived</span></div>
-      <div class="log">${L.log.map((y, i) => `<div class="year${i === L.log.length - 1 ? " latest" : ""}"><div class="year-age">${y.age}<small>${y.age === 1 ? "year" : "years"}</small></div>
-        <div>${y.entries.length ? y.entries.map((e) => `<p>${esc(e)}</p>`).join("") : `<p class="quiet">Nothing much happened.</p>`}</div></div>`).join("")}</div>
-    </section>
-
-    <section class="pane side" aria-label="Things you can do">
-      <div class="tabs" role="tablist">${tabs.map(([id, em, label]) => `<button class="tab" role="tab" aria-selected="${ui.tab === id}" data-h="${h(() => { ui.tab = id; ui.stack = []; render(); })}"><span>${em}</span>${label}</button>`).join("")}</div>
-      <div class="side-body">${renderSide(L)}</div>
-    </section>
+  const showing = mode === "desktop" || ui.sheetOpen;
+  const dockBtn = (tab, emoji, label) => `<button class="dock-btn${showing && ui.tab === tab ? " on" : ""}" data-h="${h(() => openSheet(tab))}"><span class="dock-ico">${emoji}</span><span class="dock-label">${label}</span></button>`;
+  const iconBtn = (emoji, label, fn, on) => `<button class="icon-btn${on ? " on" : ""}" title="${esc(label)}" aria-label="${esc(label)}" data-h="${h(fn)}"><span>${emoji}</span><small>${esc(label)}</small></button>`;
+  const newLife = () => choose("Start a new life?", `${fullName(L)} will be sent to the graveyard.`, [
+    { label: "Abandon this life", danger: true, fn: () => { L.causeOfDeath = "unknown causes"; store.graveyard.unshift(summaryOf(L)); store.life = null; save(); } },
+    { label: "Keep playing", secondary: true, fn: () => {} },
+  ]);
+  const log = L.log.slice(-60);
+  const phone = `<div class="phone">
+    <header class="topbar">
+      <button class="top-avatar" aria-label="Your profile" data-h="${h(() => openSheet("profile"))}">${lifeEmoji(L)}</button>
+      <div class="top-who"><div class="who-name">${esc(fullName(L))}</div><div class="who-sub">${esc(subtitleOf(L))}</div></div>
+      <div class="top-money"><span>Age ${L.age}</span><b class="${L.money < 0 ? "neg" : "pos"}">${formatMoney(L.money)}</b></div>
+    </header>
+    <nav class="topicons">
+      ${iconBtn("🎁", "Packs", () => openSheet("packs"), showing && ui.tab === "packs")}
+      ${iconBtn("🪪", "Me", () => openSheet("profile"), showing && ui.tab === "profile")}
+      ${iconBtn("⚡", "God", () => openSheet("god"), showing && ui.tab === "god")}
+      ${iconBtn(mode === "mobile" ? "🖥️" : "📱", mode === "mobile" ? "PC view" : "Phone view", toggleLayout)}
+      ${iconBtn("🔄", "New life", newLife)}
+    </nav>
+    ${chips.length ? `<div class="chip-row">${chips.join("")}</div>` : ""}
+    <main class="feed log" aria-label="Your life story">${log.map((y, i) => `<div class="year${i === log.length - 1 ? " latest" : ""}"><div class="year-age">Age ${y.age}</div>
+      <div>${y.entries.length ? y.entries.map((e) => `<p>${esc(e)}</p>`).join("") : `<p class="quiet">Nothing much happened.</p>`}</div></div>`).join("")}</main>
+    <div class="dock">
+      ${dockBtn("occupation", inPrison(L) ? "⛓️" : L.age < 18 && !L.job ? "🎒" : "💼", inPrison(L) ? "Prison" : "Occupation")}
+      ${dockBtn("assets", "🏠", "Assets")}
+      <button class="age-orb" ${blocked ? "disabled" : ""} data-h="${h(ageUpNow)}" aria-label="Age up"><b>＋</b><span>Age</span></button>
+      ${dockBtn("relationships", "❤️", "Relationships")}
+      ${dockBtn("activities", "🎯", "Activities")}
+    </div>
+    <div class="statgrid">${statBar("Happiness", "😊", s.happiness)}${statBar("Health", "❤️", s.health)}${statBar("Smarts", "🧠", s.smarts)}${statBar("Looks", "✨", s.looks)}</div>
+    ${mode === "mobile" && ui.sheetOpen ? `<div class="sheet-overlay${ui.sheetAnim ? " anim" : ""}">${renderSheet(L, mode)}</div>` : ""}
   </div>`;
+  return `<div class="app-shell ${mode}">${phone}${mode === "desktop" ? `<aside class="sheet-panel">${renderSheet(L, mode)}</aside>` : ""}</div>`;
 }
 
-function renderSide(L) {
+// MARK: Layout: phone or computer
+
+function layoutMode() {
+  const pref = store.settings.layout || "auto";
+  if (pref !== "auto") return pref;
+  return window.innerWidth < 900 ? "mobile" : "desktop";
+}
+function toggleLayout() {
+  store.settings.layout = layoutMode() === "mobile" ? "desktop" : "mobile";
+  save(); render();
+}
+function layoutRow() {
+  const pref = store.settings.layout || "auto";
+  return `<div class="seg-row"><span>📱 Layout</span><div class="seg">${[["auto", "Automatic"], ["mobile", "Phone"], ["desktop", "Computer"]].map(([id, label]) =>
+    `<button class="btn small" aria-pressed="${pref === id}" data-h="${h(() => { store.settings.layout = id; save(); render(); })}">${label}</button>`).join("")}</div></div>`;
+}
+
+const SheetTitles = { occupation: "Occupation", assets: "Assets", relationships: "Relationships", activities: "Activities", packs: "Expansion Packs", profile: "Profile", god: "God Mode" };
+function openSheet(tab) { ui.sheetAnim = !ui.sheetOpen; ui.tab = tab; ui.stack = []; ui.sheetOpen = true; render(); }
+function closeSheet() { ui.sheetOpen = false; ui.stack = []; render(); }
+
+function viewTitle(L, v) {
+  const t = {
+    job: "My Job", openings: "Job Openings", education: "Education", gigs: "Freelance Gigs", retirement: "Retirement", love: "Love Life", finances: "Finances",
+    myHomes: "My Homes", myVehicles: "My Vehicles", homes: "Real Estate", licenses: "Licenses", casino: "Casino", emigrate: "Emigrate", look: v.mode === "god" ? "Appearance" : "Your Look",
+  }[v.type];
+  if (t) return t;
+  if (v.type === "act") return ActGroups[v.id]?.[1] || "Activities";
+  if (v.type === "person" || v.type === "godPerson") { const p = findRel(L, v.id); return p ? relName(p) : "Person"; }
+  if (v.type === "vehicles") return VehicleGroups[v.group]?.label || "Vehicles";
+  if (v.type === "vehicle") return L.assets.find((a) => a.id === v.id)?.name || "Vehicle";
+  if (v.type === "home") return L.assets.find((a) => a.id === v.id)?.address || "Home";
+  if (v.type === "listing") return v.listing.address;
+  if (v.type === "license") return Licenses[v.id]?.name || "License";
+  if (v.type === "business") return (L.businesses || []).find((b) => b.id === v.id)?.name || "Business";
+  if (v.type === "pack") return { boss: "Boss Mode", royal: "Royalty", crime: "Organized Crime", pets: "Pets & Exotic Animals", zoo: "Zoo", fame: "Fame", prison: "Prison" }[v.id] || "Pack";
+  return SheetTitles[ui.tab];
+}
+
+function renderSheet(L, mode) {
   const top = ui.stack[ui.stack.length - 1];
-  if (top) {
-    const back = `<button class="back" data-h="${h(() => { ui.stack.pop(); render(); })}">‹ Back</button>`;
-    return back + renderSubview(L, top);
-  }
+  const back = top ? `<button class="sheet-back" aria-label="Back" data-h="${h(() => { ui.stack.pop(); render(); })}">‹</button>` : "";
+  const close = mode === "mobile" ? `<button class="sheet-close" aria-label="Close" data-h="${h(closeSheet)}">✕</button>` : "";
+  return `<div class="sheet"><div class="sheet-head">${back}<h2>${esc(top ? viewTitle(L, top) : SheetTitles[ui.tab])}</h2>${close}</div>
+    <div class="sheet-body side-body">${top ? renderSubview(L, top) : renderHub(L)}</div></div>`;
+}
+
+function renderHub(L) {
   switch (ui.tab) {
-    case "career": return inPrison(L) ? renderPrison(L) : renderCareer(L);
-    case "assets": return renderAssets(L);
-    case "people": return renderPeople(L);
-    case "activities": return inPrison(L) ? renderPrison(L) : renderActivities(L);
+    case "occupation": return inPrison(L) ? renderPrison(L) : occupationHub(L);
+    case "assets": return assetsHub(L);
+    case "relationships": return renderPeople(L);
+    case "activities": return inPrison(L) ? renderPrison(L) : activitiesHub(L);
     case "profile": return renderProfile(L);
     case "god": return renderGodMode(L);
     case "packs": return renderPacks(L);
@@ -340,13 +410,45 @@ function renderSide(L) {
   return "";
 }
 
+/// A big square menu button, BitLife-style.
+function tile(emoji, label, sub, fn, opts = {}) {
+  const dis = opts.disabled || !fn;
+  return `<button class="tile${opts.danger ? " danger" : ""}" ${dis ? "disabled" : `data-h="${h(fn)}"`}><span class="tile-emoji">${emoji}</span><span class="tile-label">${esc(label)}</span>${sub ? `<span class="tile-sub">${esc(sub)}</span>` : ""}</button>`;
+}
+const tiles = (arr) => `<div class="tiles">${arr.filter(Boolean).join("")}</div>`;
+/// A summary card at the top of a menu.
+const hubCard = (emoji, title, sub, extra = "", fn = null) => `<${fn ? `button data-h="${h(fn)}"` : "div"} class="hub-card"><span class="hub-emoji">${emoji}</span><span class="hub-main"><b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ""}${extra}</span>${fn ? `<span class="chev">›</span>` : ""}</${fn ? "button" : "div"}>`;
+
 function push(view) { ui.stack.push(view); render(); }
 
-// MARK: Career tab
+// MARK: Occupation
 
-function renderCareer(L) {
+function occupationHub(L) {
   let html = "";
+  const school = schoolName(L);
+  if (L.job) {
+    const j = normalizeJob(L);
+    html += hubCard("💼", j.title, `${j.company} · ${formatMoney(j.salary)}/yr`, `<div class="hub-bars">${statBar("Performance", "📊", j.performance)}</div>`, () => push({ type: "job" }));
+  } else if (school) {
+    const g = L.enrollment ? L.enrollment.grades : L.schoolGrades;
+    html += hubCard("🎒", school, `Grades: ${gradeLetter(g)} (${g}%)`, "", () => push({ type: "education" }));
+  } else if (L.isRetired) html += hubCard("🏖️", "Retired", `Pension ${formatMoney(L.pension)}/yr`, "", () => push({ type: "retirement" }));
+  else if (L.age >= 14) html += hubCard("🔎", L.unemployment ? "Unemployed (on benefits)" : "Unemployed", "Look through the job openings below.");
+  else html += hubCard("🧸", "Just a kid", "You can get a job at 14.");
+  const gigsLeft = Math.max(0, 3 - count(L, "gigsThisYear"));
+  html += tiles([
+    L.job && tile("💼", "My Job", "Work, boss, promotions", () => push({ type: "job" })),
+    school && tile("📝", "Study Harder", "🎮 Quiz yourself", () => withMinigame("math", { title: "Study session", emoji: "📝", level: L.age < 11 ? 1 : L.age < 16 ? 2 : 3 }, studyHarder)),
+    L.age >= 14 && tile("📋", "Job Openings", L.job ? "Find something better" : "Get a job", () => push({ type: "openings" })),
+    tile("🎓", "Education", school || eduLabel[L.education], () => push({ type: "education" })),
+    L.age >= 10 && tile("🛠️", "Gigs", `${gigsLeft} left this year`, () => push({ type: "gigs" })),
+    (L.isRetired || L.unemployment) && tile(L.isRetired ? "🏖️" : "📬", L.isRetired ? "Retirement" : "Unemployment", L.isRetired ? "Pension & 401(k)" : `${formatMoney(L.unemployment.amount)}/yr`, () => push({ type: "retirement" })),
+  ]);
+  return html;
+}
 
+function renderEducation(L) {
+  let html = "";
   // Education
   let edu = lv("Highest education", eduLabel[L.education]);
   if (L.major) edu += lv("Major", esc(L.major));
@@ -374,8 +476,13 @@ function renderCareer(L) {
   }
   html += section("Education", edu);
 
-  // Current job
-  if (L.job) {
+  return html;
+}
+
+function renderJob(L) {
+  if (!L.job) return `<div class="pad muted">You don't have a job.</div>`;
+  let html = "";
+  {
     const j = normalizeJob(L);
     const t = jobTemplate(L);
     const p = jobProfile(t);
@@ -387,8 +494,9 @@ function renderCareer(L) {
     if (j.lastReview) cur += lv("Last review", `${j.lastReview.rating}${j.lastReview.raise ? ` · +${formatMoney(j.lastReview.raise)}` : ""}`, j.warnings ? "red" : "");
     if (j.warnings) cur += lv("Warnings", `${j.warnings} of 3`, "red");
     cur += `<div class="pad">${statBar("Performance", "📊", j.performance)}${statBar("Stress", "😫", j.stress)}${statBar("Satisfaction", "🙂", j.satisfaction)}${statBar("Boss", "🧑‍💼", j.boss.bond)}${L.fame > 0 ? statBar("Fame", "⭐", L.fame) : ""}</div>`;
-    html += section("Current job", cur, BossStyles[j.boss.style][1]);
-    html += section("Work-life balance", settingRow("Hours", Object.entries(HoursModes).map(([id, m]) => [id, m[0]]), j.hoursMode, (v) => setAndSave(() => setHoursMode(L, v)))
+    const details = section("Details", cur, BossStyles[j.boss.style][1]);
+    let rest = "";
+    rest += section("Work-life balance", settingRow("Hours", Object.entries(HoursModes).map(([id, m]) => [id, m[0]]), j.hoursMode, (v) => setAndSave(() => setHoursMode(L, v)))
       + `<div class="pad effects">${jobEffects(L).map((e) => `<div>${esc(e)}</div>`).join("")}</div>`,
       p.hourly ? "Overtime pays time-and-a-half here, but it adds stress." : "Overtime raises your performance and your stress. Coasting does the opposite.");
 
@@ -397,7 +505,7 @@ function renderCareer(L) {
       let rungs = ladder.map((rung, i) => `<div class="lv"><span style="color:inherit">${i < j.level ? "✅" : i === j.level ? "📍" : "🔒"} <span class="${i > j.level ? "muted" : ""}" style="${i === j.level ? "font-weight:700" : ""}">${esc(rung)}</span></span><span class="muted">${formatMoney(jobSalary(L, i))}</span></div>`).join("");
       const b = branchOf(t);
       if (b && !j.track) rungs += `<div class="lv"><span>🔀 Then: ${b.tracks.map((tr) => tr.name).join(", ")}</span><span></span></div>`;
-      html += section("Career ladder", rungs);
+      rest += section("Career ladder", rungs);
     }
 
     if (mustChooseTrack(L)) {
@@ -426,13 +534,25 @@ function renderCareer(L) {
     work += row("🚪", "Quit job", null, () => choose("Quit your job?", `You'll stop earning ${formatMoney(j.salary)} a year.`, [
       { label: "Quit", danger: true, fn: () => act(quitJob) }, { label: "Stay", secondary: true, fn: () => {} },
     ]), { danger: true });
-    html += section("At work", work, "Each work action can be done once per year. Risky ones can get you fired, hurt or arrested.");
-  } else if (L.isRetired) {
+    html = hubCard("💼", j.title, `${j.company} · ${formatMoney(j.salary)}/yr`, `<div class="hub-bars">${statBar("Performance", "📊", j.performance)}${statBar("Stress", "😫", j.stress)}</div>`) + html;
+    html += section("At work", work, "Each work action can be done once per year. Risky ones can get you fired, hurt or arrested.") + rest + details;
+  }
+  return html;
+}
+
+function renderRetirement(L) {
+  let html = "";
+  if (L.isRetired) {
     html += section("Retirement", lv("Pension", `${formatMoney(L.pension)}/yr`) + (L.retirement401k ? lv("401(k)", formatMoney(Math.round(L.retirement401k))) + row("💰", "Cash out your 401(k)", "Taxed as income", () => act(withdraw401k)) : ""));
   } else if (L.unemployment) {
     html += section("Unemployed", lv("Unemployment benefits", `${formatMoney(L.unemployment.amount)}/yr`) + lv("Remaining", plural(L.unemployment.years, "year")), "Benefits stop as soon as you take a new job.");
   }
 
+  return html || `<div class="pad muted">Nothing here.</div>`;
+}
+
+function renderGigs(L) {
+  let html = "";
   // Gigs
   if (L.age >= 10) {
     html += section("Freelance gigs", Gigs.map((g) => row(g.emoji, g.title,
@@ -440,6 +560,11 @@ function renderCareer(L) {
       () => act((x) => doGig(x, g)), { disabled: !canDoGig(L, g) })).join(""), `Up to 3 gigs per year. ${Math.max(0, 3 - count(L, "gigsThisYear"))} left this year.`);
   }
 
+  return html;
+}
+
+function renderOpenings(L) {
+  let html = "";
   // Openings
   if (L.age >= 14) {
     if (!ui.openings) ui.openings = jobListings(L);
@@ -480,36 +605,22 @@ function renderPrison(L) {
 // MARK: People tab
 
 function renderPeople(L) {
-  const supportFoot = isLonely(L)
-    ? "You're lonely. Make friends or find a partner; loneliness drags your happiness down every year."
-    : socialSupport(L) >= 70 ? "The people in your life have your back. Strong relationships boost your happiness every year."
-    : "Spend time with people to keep bonds strong. Relationships you ignore for 2+ years fade.";
-  let html = section("Social support", `<div class="pad">${statBar("Support", "🫂", socialSupport(L))}</div>`, supportFoot);
-
+  let html = "";
   if (!inPrison(L)) {
-    let meet = "";
-    if (canFindDate(L)) meet += row("❤️", "Find a date", "Meet someone and see if you click", () => choose("Who are you interested in?", null, [
-      { label: "Men", fn: () => { L.datingPreference = "male"; openCandidate("date"); } },
-      { label: "Women", fn: () => { L.datingPreference = "female"; openCandidate("date"); } },
-    ]), { chev: true });
-    if (canHookUp(L)) meet += row("🔥", "Hook up", romanticPartner(L) ? "Cheat on your partner..." : "No strings attached", () => act(hookUp));
-    if (L.age >= 5) meet += row("🤝", "Make a friend", "Meet someone new", () => openCandidate("friend"), { chev: true });
-    if (L.age >= 8) meet += row("🐾", "Pet shelter", "Adopt a pet · $200", () => choose("Adopt a pet", null, Names.petSpecies.map((sp) => ({ label: `${petEmoji[sp]} ${sp}`, fn: () => act((x) => adoptPet(x, sp)) }))), { chev: true });
-    if (canAdoptChild(L)) meet += row("🍼", "Adopt a child", "Agency fees · $10,000", () => act(adoptChild));
-    html += section("Meet people", meet);
+    html += tiles([
+      canFindDate(L) && tile("❤️", "Find a Date", "See who's out there", () => choose("Who are you interested in?", null, [
+        { label: "Men", fn: () => { L.datingPreference = "male"; openCandidate("date"); } },
+        { label: "Women", fn: () => { L.datingPreference = "female"; openCandidate("date"); } },
+      ])),
+      L.age >= 5 && tile("🤝", "Make a Friend", "Meet someone new", () => openCandidate("friend")),
+      canHookUp(L) && tile("🔥", "Hook Up", romanticPartner(L) ? "Cheat…" : "No strings", () => act(hookUp)),
+      isMature(L) && L.age >= 18 && tile("🔞", "Love Life", `${count(L, "partners")} partners`, () => push({ type: "love" })),
+      L.age >= 8 && tile("🐾", "Pet Shelter", "Adopt · $200", () => choose("Adopt a pet", null, Names.petSpecies.map((sp) => ({ label: `${petEmoji[sp]} ${sp}`, fn: () => act((x) => adoptPet(x, sp)) })))),
+      canAdoptChild(L) && tile("🍼", "Adopt", "$10,000", () => act(adoptChild)),
+    ]);
   }
-
-  if (isMature(L) && !inPrison(L)) {
-    const partner = romanticPartner(L);
-    const adultFriends = L.relationships.filter((p) => p.isAlive && p.kind === "friend" && p.age >= 18);
-    let love = "";
-    if (partner && partner.age >= 18) love += row("🔥", `Have sex with ${partner.firstName}`, L.pregnancy ? "A baby is already on the way" : "Unprotected sex can lead to a baby", () => askProtection(`Have sex with ${partner.firstName}?`, (safe) => act((x) => haveSex(x, partner.id, safe))), { chev: true });
-    love += row("🍸", "One-night stand", partner ? "Cheat on your partner..." : "Find someone at a bar", () => askProtection("One-night stand", (safe) => act((x) => oneNightStand(x, safe))), { chev: true });
-    love += row("📱", "Dating app hookup", "Swipe right", () => askProtection("Dating app hookup", (safe) => act((x) => datingAppHookup(x, safe))), { chev: true });
-    if (adultFriends.length) love += row("😏", "Friends with benefits", "Ask a friend", () => choose("Who do you ask?", null, adultFriends.map((f) => ({ label: relName(f), fn: () => askProtection(`Friends with benefits with ${f.firstName}`, (safe) => act((x) => friendsWithBenefits(x, f.id, safe))) }))), { chev: true });
-    love += row("💃", "Strip club", "$250", () => act(stripClub));
-    html += section("Love life 🔞", love, `${count(L, "partners")} partners so far.`);
-  }
+  const support = socialSupport(L);
+  html += `<div class="support">${statBar("Support", "🫂", support)}<div class="muted small">${isLonely(L) ? "You're lonely. Loneliness drags your happiness down every year." : support >= 70 ? "The people in your life have your back." : "Relationships you ignore for 2+ years fade."}</div></div>`;
 
   const groups = [
     ["Family", (p) => isParent(p.kind) || p.kind === "sibling"],
@@ -527,6 +638,19 @@ function renderPeople(L) {
     html += section(title, people.map((p) => personRow(L, p)).join(""));
   }
   return html;
+}
+
+function renderLoveLife(L) {
+  if (!isMature(L) || L.age < 18) return `<div class="pad muted">Not available.</div>`;
+  const partner = romanticPartner(L);
+  const adultFriends = L.relationships.filter((p) => p.isAlive && p.kind === "friend" && p.age >= 18);
+  let love = "";
+  if (partner && partner.age >= 18) love += row("🔥", `Have sex with ${partner.firstName}`, L.pregnancy ? "A baby is already on the way" : "Unprotected sex can lead to a baby", () => askProtection(`Have sex with ${partner.firstName}?`, (safe) => act((x) => haveSex(x, partner.id, safe))), { chev: true });
+  love += row("🍸", "One-night stand", partner ? "Cheat on your partner..." : "Find someone at a bar", () => askProtection("One-night stand", (safe) => act((x) => oneNightStand(x, safe))), { chev: true });
+  love += row("📱", "Dating app hookup", "Swipe right", () => askProtection("Dating app hookup", (safe) => act((x) => datingAppHookup(x, safe))), { chev: true });
+  if (adultFriends.length) love += row("😏", "Friends with benefits", "Ask a friend", () => choose("Who do you ask?", null, adultFriends.map((f) => ({ label: relName(f), fn: () => askProtection(`Friends with benefits with ${f.firstName}`, (safe) => act((x) => friendsWithBenefits(x, f.id, safe))) }))), { chev: true });
+  love += row("💃", "Strip club", "$250", () => act(stripClub));
+  return section("Love life 🔞", love, `${count(L, "partners")} partners so far.`);
 }
 
 function personRow(L, p) {
@@ -621,44 +745,64 @@ function renderPerson(L, view) {
 
 // MARK: Activities tab
 
-function renderActivities(L) {
-  let html = "";
-  if (L.age < 13) {
-    html += section("Kid stuff", KidActivities.filter((a) => L.age >= a.min).map((a) => row(a.emoji, a.title, a.sub, () => act((x) => doKidActivity(x, a.id)))).join("") || `<div class="pad muted">You're a baby. Enjoy it!</div>`);
+const ActGroups = {
+  kid: ["🧸", "Kid Stuff"], mind: ["💪", "Mind & Body"], doctor: ["🩺", "Doctor"], social: ["📱", "Social Media"],
+  leisure: ["🎬", "Leisure"], nightlife: ["🪩", "Nightlife"], crime: ["🦹", "Crime"], record: ["📜", "Criminal Record"],
+};
+
+function activitiesHub(L) {
+  const problems = L.illnesses.length + L.addictions.length;
+  return tiles([
+    L.age < 13 && tile("🧸", "Kid Stuff", "Play, explore, learn", () => push({ type: "act", id: "kid" })),
+    tile("💪", "Mind & Body", "🎮 Gym, library, diet…", () => push({ type: "act", id: "mind" })),
+    tile("🩺", "Doctor", problems ? `${plural(problems, "condition")}` : "You're healthy", () => push({ type: "act", id: "doctor" })),
+    tile("📱", "Social Media", L.age >= 13 ? `${formatCount(L.followers)} followers` : "At 13", () => push({ type: "act", id: "social" }), { disabled: L.age < 13 }),
+    tile("🎬", "Leisure", "Movies, concerts, trips", () => push({ type: "act", id: "leisure" })),
+    tile("🪩", "Nightlife", L.age >= 14 ? (isMature(L) ? "Clubs, bars, drugs 🔞" : "Clubs and bars") : "When you're older", () => push({ type: "act", id: "nightlife" }), { disabled: L.age < 14 }),
+    tile("🦹", "Crime", "🎮 Risky business", () => push({ type: "act", id: "crime" }), { disabled: L.age < 10 }),
+    tile("🎰", "Casino", L.age >= 18 ? "Try your luck" : "At 18", () => push({ type: "casino" }), { disabled: L.age < 18 }),
+    tile("🪪", "Licenses", L.age >= 15 ? "Drive, sail, fly" : "At 15", () => push({ type: "licenses" }), { disabled: L.age < 15 }),
+    tile("✈️", "Emigrate", L.age >= 18 ? `${WORLD.length} countries` : "At 18", () => { ui.emigrateCountry = null; push({ type: "emigrate" }); }, { disabled: L.age < 18 }),
+    L.criminalRecord.length && tile("📜", "Record", plural(L.criminalRecord.length, "offense"), () => push({ type: "act", id: "record" })),
+  ]);
+}
+
+function renderActGroup(L, id) {
+  switch (id) {
+    case "kid": return section("Kid stuff", KidActivities.filter((a) => L.age >= a.min).map((a) => row(a.emoji, a.title, a.sub, () => act((x) => doKidActivity(x, a.id)))).join("") || `<div class="pad muted">You're a baby. Enjoy it!</div>`);
+    case "mind": return activitySection(L, ActivityGroups[0][0], ActivityGroups[0][1]);
+    case "doctor": {
+      let health = Treatments.map((t) => {
+        const ok = t.id !== "therapist" || L.age >= 10;
+        const cost = hasHealthInsurance(L) ? Math.round(t.cost * 0.3) : t.cost;
+        return row(t.emoji, t.title, `${formatMoney(cost)}${hasHealthInsurance(L) && t.cost !== cost ? " with insurance" : ""}`, () => act((x) => treat(x, t)), { disabled: !ok });
+      }).join("");
+      if (L.addictions.length) health += row("🏥", "Rehab", "Beat your addictions · $15,000", () => act(goToRehab));
+      const problems = L.illnesses.map((i) => Illnesses[i].name).concat(L.addictions.map((a) => Addictions[a]));
+      return section("See someone", health, problems.length ? `Conditions: ${problems.join(", ")}` : "You're in good health.");
+    }
+    case "social": return section("Social media", row("📱", "Post on social media", `${formatCount(L.followers)} followers`, () => act(postOnSocialMedia), { disabled: !canPostOnSocialMedia(L) }), "Go viral, get followers, get paid by brands once you're big.");
+    case "leisure": return ActivityGroups.slice(1).filter(([t]) => t !== "Nightlife").map(([t, ids]) => activitySection(L, t, ids)).join("");
+    case "nightlife": {
+      let html = ActivityGroups.filter(([t]) => t === "Nightlife").map(([t, ids]) => activitySection(L, t, ids)).join("");
+      if (isMature(L)) {
+        html += section("Bar 🔞", Drinks.map((d) => row(d.emoji, d.title, formatMoney(d.cost), () => act((x) => haveDrink(x, d.id)))).join(""),
+          `You've had ${count(L, "drinks")} drinking nights. The more you drink, the likelier you are to get hooked.`);
+        html += section("Drugs 🔞", Drugs.map((d) => row(d.emoji, d.title, `${formatMoney(d.cost)} · ${d.od >= 0.03 ? "Very dangerous" : d.addict >= 0.15 ? "Highly addictive" : d.trip ? "Bad trips happen" : "Risky"}`, () => act((x) => takeDrug(x, d.id)))).join("")
+          + row("💰", "Deal drugs", "Big money, big risk of prison", () => act(dealDrugs), { danger: true }),
+          "Drugs can get you hooked, arrested, or killed. Rehab is under Doctor.");
+      }
+      return html;
+    }
+    case "crime": return section("Crime", Crimes.map((c) => {
+      const ok = L.age >= c.minAge;
+      const game = CrimeGames[c.id];
+      const run = game ? () => withMinigame(game[0], { ...game[1], emoji: c.emoji }, (x) => commitCrime(x, c.id)) : () => act((x) => commitCrime(x, c.id));
+      return row(c.emoji, c.title, ok ? `${game ? "🎮 " : ""}${Math.round(c.catchChance * 100)}% chance of getting caught` : `Available at ${c.minAge}`, run, { disabled: !ok });
+    }).join(""), "Crime pays... until it doesn't. Adults who get caught go to prison.");
+    case "record": return section("Criminal record", L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join("") || `<div class="pad muted">Clean.</div>`);
   }
-  for (const [title, ids] of ActivityGroups.slice(0, 1)) html += activitySection(L, title, ids);
-
-  let health = Treatments.map((t) => {
-    const ok = t.id !== "therapist" || L.age >= 10;
-    return row(t.emoji, t.title, formatMoney(t.cost), () => act((x) => treat(x, t)), { disabled: !ok });
-  }).join("");
-  if (L.addictions.length) health += row("🏥", "Rehab", "Beat your addictions · $15,000", () => act(goToRehab));
-  const problems = L.illnesses.map((i) => Illnesses[i].name).concat(L.addictions.map((a) => Addictions[a]));
-  html += section("Health", health, problems.length ? `Conditions: ${problems.join(", ")}` : "You're in good health.");
-
-  html += section("Social media", row("📱", "Post on social media", canPostOnSocialMedia(L) ? `${formatCount(L.followers)} followers` : "Available at 13", () => act(postOnSocialMedia), { disabled: !canPostOnSocialMedia(L) }));
-  for (const [title, ids] of ActivityGroups.slice(1)) html += activitySection(L, title, ids);
-  if (isMature(L)) {
-    html += section("Bar 🔞", Drinks.map((d) => row(d.emoji, d.title, formatMoney(d.cost), () => act((x) => haveDrink(x, d.id)))).join(""),
-      `You've had ${count(L, "drinks")} drinking nights. The more you drink, the likelier you are to get hooked.`);
-    html += section("Drugs 🔞", Drugs.map((d) => row(d.emoji, d.title, `${formatMoney(d.cost)} · ${d.od >= 0.03 ? "Very dangerous" : d.addict >= 0.15 ? "Highly addictive" : d.trip ? "Bad trips happen" : "Risky"}`, () => act((x) => takeDrug(x, d.id)))).join("")
-      + row("💰", "Deal drugs", "Big money, big risk of prison", () => act(dealDrugs), { danger: true }),
-      "Drugs can get you hooked, arrested, or killed. Rehab is in the Health section.");
-  }
-
-  let more = row("🎰", "Casino", L.age >= 18 ? "Blackjack, roulette, slots & horses" : "Available at 18", () => push({ type: "casino" }), { disabled: L.age < 18, chev: true });
-  more += row("🪪", "Licenses", L.age >= 15 ? "Driving, motorcycle, boating, captain, pilot, jet and helicopter" : "Available at 15", () => push({ type: "licenses" }), { disabled: L.age < 15, chev: true });
-  more += row("✈️", "Emigrate", L.age >= 18 ? `${WORLD.length} countries · from $2,000` : "Available at 18", () => { ui.emigrateCountry = null; push({ type: "emigrate" }); }, { disabled: L.age < 18, chev: true });
-  html += section("More", more);
-
-  html += section("Crime", Crimes.map((c) => {
-    const ok = L.age >= c.minAge;
-    const game = CrimeGames[c.id];
-    const run = game ? () => withMinigame(game[0], { ...game[1], emoji: c.emoji }, (x) => commitCrime(x, c.id)) : () => act((x) => commitCrime(x, c.id));
-    return row(c.emoji, c.title, ok ? `${game ? "🎮 " : ""}Risky · ${Math.round(c.catchChance * 100)}% chance of getting caught` : `Available at ${c.minAge}`, run, { disabled: !ok });
-  }).join(""), "Crime pays... until it doesn't. Adults who get caught go to prison.");
-  if (L.criminalRecord.length) html += section("Criminal record", L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
-  return html;
+  return "";
 }
 
 function activitySection(L, title, ids) {
@@ -700,7 +844,7 @@ function renderProfile(L) {
   if (L.criminalRecord.length || inPrison(L)) {
     html += section("Criminal record", (inPrison(L) ? lv("In prison", `${plural(L.prisonYearsLeft, "year")} left`) : "") + L.criminalRecord.map((c) => `<div class="pad">${esc(c)}</div>`).join(""));
   }
-  html += section("Settings", matureToggleRow() + minigameToggleRow());
+  html += section("Settings", layoutRow() + matureToggleRow() + minigameToggleRow());
   html += section("Ribbon so far", (() => { const r = Ribbons[ribbonOf(L)]; return `<div class="pad">${r[1]} <b>${r[0]}</b> <span class="muted">· ${r[2]}</span></div>`; })(),
     "The ribbon you earn is decided when you die.");
   return html;
@@ -709,6 +853,16 @@ function renderProfile(L) {
 function renderSubview(L, view) {
   switch (view.type) {
     case "person": return renderPerson(L, view);
+    case "job": return renderJob(L);
+    case "openings": return renderOpenings(L);
+    case "education": return renderEducation(L);
+    case "gigs": return renderGigs(L);
+    case "retirement": return renderRetirement(L);
+    case "act": return renderActGroup(L, view.id);
+    case "love": return renderLoveLife(L);
+    case "finances": return renderFinances(L);
+    case "myHomes": return renderMyHomes(L);
+    case "myVehicles": return renderMyVehicles(L);
     case "homes": return renderHomeMarket(L, view);
     case "listing": return renderListing(L, view);
     case "home": return renderHome(L, view);
@@ -818,6 +972,7 @@ function onKey(e) {
     if (ui.outcome || ui.choice || ui.candidate) { ui.outcome = null; ui.choice = null; ui.candidate = null; render(); }
     else if (store.life?.popups?.length && !store.life.pendingEvents.length) { store.life.popups.shift(); save(); render(); }
     else if (ui.stack.length) { ui.stack.pop(); render(); }
+    else if (ui.sheetOpen && layoutMode() === "mobile") closeSheet();
   }
 }
 
@@ -829,6 +984,11 @@ function start(data) {
   document.addEventListener("input", onGodInput);
   document.addEventListener("change", onGodChange);
   document.addEventListener("input", onWorldSearch);
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (store.life && (store.settings.layout || "auto") === "auto" && layoutMode() !== ui.lastMode) render(); }, 150);
+  });
   render(true);
 }
 

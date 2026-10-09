@@ -84,16 +84,15 @@ function renderPacks(L) {
   const bizCount = (L.businesses || []).length;
   const pets = L.relationships.filter((p) => p.isAlive && p.kind === "pet").length;
   const rows = [
-    row("💼", "Boss Mode", bizCount ? `${bizCount} ${bizCount === 1 ? "business" : "businesses"} · worth ${formatMoney((L.businesses || []).reduce((s, b) => s + businessValuation(b) * ownerStake(b), 0))}` : "Start and run your own company", () => push({ type: "pack", id: "boss" }), { chev: true }),
-    row("👑", "Royalty", L.royal ? (royalActive(L) ? `${royalTitle(L)} of ${L.royal.country} · approval ${L.royal.approval}%` : royalTitle(L) || "Former royal") : "Royal lives start from the main menu", () => push({ type: "pack", id: "royal" }), { chev: true }),
-    row("🕴️", "Organized Crime", L.mob ? `${MobRanks[L.mob.rank]} · ${mobFamily(L).name}` : "Get in with a crime family", () => push({ type: "pack", id: "crime" }), { chev: true }),
-    row("🐾", "Pets & Exotic Animals", pets ? `${plural(pets, "pet")}` : "Permits, land and the animals you can keep", () => push({ type: "pack", id: "pets" }), { chev: true }),
-    row("🦒", "Zoo", L.zoo ? `${L.zoo.name}${L.zoo.accredited ? " · Accredited" : ""}` : `Buy a struggling zoo · ${formatMoney(ZOO_PRICE)}`, () => push({ type: "pack", id: "zoo" }), { chev: true }),
-    row("⭐", "Fame", isCelebrity(L) ? `Fame ${L.fame}% · Image ${celebImage(L)}%` : "Become famous first", () => push({ type: "pack", id: "fame" }), { chev: true }),
-    row("⛓️", "Prison", inPrison(L) ? `${plural(L.prisonYearsLeft, "year")} left` : L.fugitive ? "On the run" : "Life inside, if it comes to that", () => push({ type: "pack", id: "prison" }), { chev: true }),
+    tile("💼", "Boss Mode", bizCount ? `${bizCount} ${bizCount === 1 ? "business" : "businesses"} · worth ${formatMoney((L.businesses || []).reduce((s, b) => s + businessValuation(b) * ownerStake(b), 0))}` : "Start and run your own company", () => push({ type: "pack", id: "boss" })),
+    tile("👑", "Royalty", L.royal ? (royalActive(L) ? `${royalTitle(L)} of ${L.royal.country} · approval ${L.royal.approval}%` : royalTitle(L) || "Former royal") : "Royal lives start from the main menu", () => push({ type: "pack", id: "royal" })),
+    tile("🕴️", "Organized Crime", L.mob ? `${MobRanks[L.mob.rank]} · ${mobFamily(L).name}` : "Get in with a crime family", () => push({ type: "pack", id: "crime" })),
+    tile("🐾", "Pets & Exotic Animals", pets ? `${plural(pets, "pet")}` : "Permits, land and the animals you can keep", () => push({ type: "pack", id: "pets" })),
+    tile("🦒", "Zoo", L.zoo ? `${L.zoo.name}${L.zoo.accredited ? " · Accredited" : ""}` : `Buy a struggling zoo · ${formatMoney(ZOO_PRICE)}`, () => push({ type: "pack", id: "zoo" })),
+    tile("⭐", "Fame", isCelebrity(L) ? `Fame ${L.fame}% · Image ${celebImage(L)}%` : "Become famous first", () => push({ type: "pack", id: "fame" })),
+    tile("⛓️", "Prison", inPrison(L) ? `${plural(L.prisonYearsLeft, "year")} left` : L.fugitive ? "On the run" : "Life inside, if it comes to that", () => push({ type: "pack", id: "prison" })),
   ];
-  return intro("<b>Expansion packs.</b> Deeper ways to live: run a company, wear a crown, join the mob, keep animals, manage fame, or survive prison. God Mode has its own tab.")
-    + section("Packs", rows.join(""));
+  return intro("Deeper ways to live: run a company, wear a crown, join the mob, keep animals, manage fame, or survive prison.") + tiles(rows);
 }
 
 function renderPack(L, view) {

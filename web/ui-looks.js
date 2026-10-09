@@ -18,13 +18,16 @@ function describeLook(look) {
 function renderLookEditor(look, gender, mode, set) {
   const genetic = mode !== "salon";
   const upd = (patch) => () => set({ ...look, ...patch });
-  let html = "";
-  if (genetic) {
+  const tabs = genetic ? [["body", "🧬 Body"], ["hair", "💇 Hair"], ["style", "🕶️ Style"]] : [["hair", "💇 Hair"], ["style", "🕶️ Style"]];
+  if (!tabs.some(([id]) => id === ui.lookTab)) ui.lookTab = tabs[0][0];
+  const tab = ui.lookTab;
+  let html = `<div class="seg look-tabs">${tabs.map(([id, label]) => `<button class="btn" aria-pressed="${tab === id}" data-h="${h(() => { readForm(); ui.lookTab = id; render(); })}">${label}</button>`).join("")}</div>`;
+  if (genetic && tab === "body") {
     html += lookGroup("Skin tone", `<div class="swatches">${SkinTones.map((c, i) => swatch(c, look.skin === i, `Skin tone ${i + 1}`, upd({ skin: i }))).join("")}</div>`);
     html += lookGroup("Eyes", `<div class="swatches">${Object.entries(EyeColors).map(([k, [n, c]]) => swatch(c, look.eyes === k, n, upd({ eyes: k }))).join("")}</div>`);
     html += lookGroup("Natural hair color", `<div class="swatches">${NaturalHair.map((k) => swatch(HairColors[k][1], look.natural === k, HairColors[k][0], upd({ natural: k, hairColor: look.hairColor === look.natural ? k : look.hairColor }))).join("")}</div>`);
   }
-  if (mode !== "create") {
+  if (mode !== "create" && tab === "hair") {
     html += lookGroup(mode === "salon" ? "Hair color (dye)" : "Dyed hair color", `<div class="swatches">${swatch(HairColors[look.natural][1], look.hairColor === look.natural, `Natural (${HairColors[look.natural][0]})`, upd({ hairColor: look.natural }))}<span class="swatch-sep"></span>${Object.keys(HairColors).filter((k) => k !== look.natural).map((k) => swatch(HairColors[k][1], look.hairColor === k, HairColors[k][0], upd({ hairColor: k }))).join("")}</div>`);
   }
   const styleBtns = Object.entries(HairStyles).map(([id, st]) => {
@@ -32,7 +35,8 @@ function renderLookEditor(look, gender, mode, set) {
     const texture = st.texture && genetic ? st.texture : look.texture;
     return `<button class="style-pick" aria-pressed="${look.hair === id}" title="${esc(st.name)}" data-h="${h(upd({ hair: id, texture }))}">${preview}<span>${esc(st.name)}</span></button>`;
   }).join("");
-  html += lookGroup("Hairstyle", `<div class="style-grid">${styleBtns}</div>`);
+  if (tab === "hair") html += lookGroup("Hairstyle", `<div class="style-grid">${styleBtns}</div>`);
+  if (tab !== "style") return `<div class="look-editor">${html}</div>`;
   html += lookGroup("Facial hair", `<div class="seg wrap">${Object.entries(FacialHair).map(([k, n]) => chip(n, (look.facial || "none") === k, upd({ facial: k }))).join("")}</div>`);
   html += lookGroup("Accessories", `<div class="seg wrap">${Object.entries(Accessories).map(([k, a]) => chip(`${a.emoji} ${a.name}`, (look.acc || []).includes(k), () => set(toggleAccessory(look, k)), mode === "salon" ? formatMoney(a.price) : null)).join("")}</div>`);
   html += lookGroup("Outfit", `<div class="swatches">${Outfits.map((c, i) => swatch(c, look.outfit === i, `Outfit ${i + 1}`, upd({ outfit: i }))).join("")}</div>`);

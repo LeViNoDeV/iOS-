@@ -8,8 +8,29 @@ const conditionWord = (c) => (c >= 85 ? "Excellent" : c >= 65 ? "Good" : c >= 45
 
 // MARK: Money tab
 
-function renderAssets(L) {
+const yearlyAssetCosts = (L) => L.assets.reduce((s, a) => {
+  if (isHome(a)) { const c = homeYearlyCosts(a); return s + c.tax + c.insurance + c.upkeep + (a.loan ? a.payment : 0) - (a.rented ? homeRent(a) : 0); }
+  return s + vehicleUpkeep(a) + crewCost(a) + (a.loan ? a.payment : 0);
+}, 0);
+
+function assetsHub(L) {
   for (const a of L.assets) { if (isHome(a)) normalizeHome(a, L); else normalizeVehicle(a); }
+  const homes = homesOf(L), vehicles = L.assets.filter(isVehicle);
+  const shop = !inPrison(L);
+  let html = hubCard("💵", formatMoney(L.money), `Net worth ${formatMoney(netWorth(L))}${L.job ? ` · earning ${formatMoney(Math.trunc(L.job.salary * 0.75))}/yr` : ""}`, "", () => push({ type: "finances" }));
+  html += tiles([
+    tile("💵", "Finances", "Income, costs, 401(k)", () => push({ type: "finances" })),
+    tile("🏠", "My Homes", homes.length ? `${homes.length} owned` : "None yet", () => push({ type: "myHomes" })),
+    tile("🚗", "My Vehicles", vehicles.length ? `${vehicles.length} owned` : "None yet", () => push({ type: "myVehicles" })),
+    tile("🏡", "Real Estate", L.age >= 18 ? `Homes in ${L.city}` : "At 18", () => push({ type: "homes", group: "all" }), { disabled: !shop || L.age < 18 }),
+    ...Object.entries(VehicleGroups).map(([g, d]) => tile(d.emoji, d.label, L.age >= 16 ? d.classes.map((c) => VehicleClasses[c].label).slice(0, 2).join(", ") : "At 16", () => push({ type: "vehicles", group: g, cls: d.classes[g === "car" ? 1 : 0] }), { disabled: !shop || L.age < 16 })),
+    tile("🪪", "Licenses", `${Object.keys(Licenses).filter((id) => hasLicense(L, id)).length} of ${Object.keys(Licenses).length}`, () => push({ type: "licenses" })),
+  ]);
+  if (inPrison(L)) html += `<div class="pad muted">You can't go shopping from prison.</div>`;
+  return html;
+}
+
+function renderFinances(L) {
   let fin = lv("Bank balance", formatMoney(L.money), L.money < 0 ? "money-neg" : "money-pos") + lv("Net worth", formatMoney(netWorth(L)));
   if (L.studentLoans > 0) fin += lv("Student loans", formatMoney(L.studentLoans), "money-neg");
   if (L.job) fin += lv("Salary (after tax)", `${formatMoney(Math.trunc(L.job.salary * 0.75))}/yr`);
@@ -22,31 +43,24 @@ function renderAssets(L) {
     return s + vehicleUpkeep(a) + crewCost(a) + (a.loan ? a.payment : 0);
   }, 0);
   if (L.assets.length) fin += lv("Property & vehicle costs", `${yearly >= 0 ? "-" : "+"}${formatMoney(Math.abs(yearly))}/yr`, yearly > 0 ? "money-neg" : "money-pos");
-  let html = section("Finances", fin);
+  return section("Finances", fin);
+}
 
+function renderMyHomes(L) {
   const homes = homesOf(L);
   const market = L.housing ? lv("Housing market last year", pctText(L.housing.last), L.housing.last >= 0 ? "money-pos" : "money-neg") : "";
-  html += section("Homes", homes.map((a) => row(homeType(a).emoji, a.address, `${a.name} · ${a.rented ? "Rented out" : "I live here"} · Condition ${a.condition}%`,
+  return section("Homes", homes.map((a) => row(homeType(a).emoji, a.address, `${a.name} · ${a.rented ? "Rented out" : "I live here"} · Condition ${a.condition}%`,
     () => push({ type: "home", id: a.id }), { right: formatMoney(a.value) })).join("") + market
-    || `<div class="pad muted">${L.age >= 18 ? "You don't own a home. Without one you pay rent once you move out." : "You live with your family."}</div>`);
+    || `<div class="pad muted">${L.age >= 18 ? "You don't own a home. Without one you pay rent once you move out." : "You live with your family."}</div>`)
+    + (L.age >= 18 && !inPrison(L) ? tiles([tile("🏡", "Browse Homes", `For sale in ${L.city}`, () => push({ type: "homes", group: "all" }))]) : "");
+}
 
+function renderMyVehicles(L) {
   const vehicles = L.assets.filter(isVehicle);
-  if (vehicles.length) {
-    html += section("Vehicles", vehicles.map((a) => {
-      const blocked = vehicleBlocker(L, a);
-      return row(vehicleEmoji(a), a.name, `${vehicleClass(a).label} · Condition ${a.condition}%${blocked ? " · 🚫 Can't use it yet" : ""}`, () => push({ type: "vehicle", id: a.id }), { right: formatMoney(a.value) });
-    }).join(""));
-  }
-
-  let shop;
-  if (inPrison(L)) shop = `<div class="pad muted">You can't go shopping from prison.</div>`;
-  else {
-    shop = row("🏡", "Real estate", L.age >= 18 ? `Homes for sale in ${L.city}` : "Available at 18", () => push({ type: "homes", group: "all" }), { chev: true, disabled: L.age < 18 })
-      + Object.entries(VehicleGroups).map(([g, d]) => row(d.emoji, d.label, d.classes.map((c) => VehicleClasses[c].label).join(" · "), () => push({ type: "vehicles", group: g, cls: d.classes[g === "car" ? 1 : 0] }), { chev: true, disabled: L.age < 16 })).join("");
-  }
-  html += section("Shopping", shop);
-  html += section("Licenses", row("🪪", "Licenses", `${Object.keys(Licenses).filter((id) => hasLicense(L, id)).length} of ${Object.keys(Licenses).length} · drive, ride, sail and fly`, () => push({ type: "licenses" }), { chev: true }));
-  return html;
+  return section("Vehicles", vehicles.map((a) => {
+    const blocked = vehicleBlocker(L, a);
+    return row(vehicleEmoji(a), a.name, `${vehicleClass(a).label} · Condition ${a.condition}%${blocked ? " · 🚫 Can't use it yet" : ""}`, () => push({ type: "vehicle", id: a.id }), { right: formatMoney(a.value) });
+  }).join("") || `<div class="pad muted">You don't own any vehicles.</div>`);
 }
 
 // MARK: Real estate

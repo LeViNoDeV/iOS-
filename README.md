@@ -2,7 +2,7 @@
 
 A BitLife-style life simulator for iOS, written in SwiftUI. You're born with random stats, family, and hometown, then tap **Age +** to live year by year: go to school, get a job, fall in love, buy a house, commit crimes, and eventually die.
 
-## Play on a PC (web version)
+## Play on a PC or a phone (web version)
 
 The `web/` folder has the same game as a website that runs in any modern browser (Chrome, Edge, Firefox, Safari).
 
@@ -10,6 +10,8 @@ The `web/` folder has the same game as a website that runs in any modern browser
 2. Open `web/index.html` in your browser by double-clicking it.
 
 No install or internet connection is needed. Fonts load from Google Fonts when you're online. Your game saves automatically in the browser. Press **Space** to age up.
+
+The screen works like BitLife: your story in the middle, a big **＋ Age** button with **Occupation**, **Assets**, **Relationships** and **Activities** around it, and your stats underneath. Each button opens a menu of tiles. On a computer the menu opens beside the game; on a phone it slides up over it. The layout switches automatically by screen size, or pick **Phone** or **Computer** in Settings (or tap 📱/🖥️ at the top). Hosted on a website, it can be added to a phone's home screen and opens full screen like an app.
 
 The web code mirrors the iOS app's game logic: `engine.js` (aging, health, money, relationships), `events.js` (random events), `actions.js` (everything you can do) and `game-data.js` (jobs, career ladders and work actions, generated from the Swift data). `more-events.js` holds the extra BitLife-style popup events. `mature.js` is the optional 18+ Mature Mode (drinking, drugs and non-explicit sex for adult characters), turned on from the start screen or the Profile tab. `ui.js` and `style.css` are the interface.
 

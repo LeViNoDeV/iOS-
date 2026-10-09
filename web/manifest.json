@@ -1,0 +1,11 @@
+{
+  "name": "LifeSim",
+  "short_name": "LifeSim",
+  "description": "Live a whole life, one year at a time.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1f6",
+  "theme_color": "#1f9d55",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
