@@ -37,13 +37,14 @@ function inheritedStats(mom, dad) {
   };
 }
 
-const playerAsParent = (L) => ({ looks: L.stats.looks, smarts: L.stats.smarts, health: L.stats.health });
-const strangerParent = () => ({ looks: rnd(10, 100), smarts: rnd(10, 100), health: rnd(50, 100) });
+const playerAsParent = (L) => ({ looks: L.stats.looks, smarts: L.stats.smarts, health: L.stats.health, look: ensureLook(L, L.gender, L.age) });
+const strangerParent = () => ({ looks: rnd(10, 100), smarts: rnd(10, 100), health: rnd(50, 100), look: randomLook(pick(["male", "female"]), 30) });
 
 /// Gives a baby its parents' genes (looks, smarts, health).
 function applyInheritance(child, mom, dad) {
   const s = inheritedStats(mom, dad);
   child.looks = s.looks; child.smarts = s.smarts; child.health = s.health;
+  if (mom.look && dad.look) child.look = inheritLook(mom.look, dad.look, child.gender, child.age);
   child.inherited = true;
   return child;
 }

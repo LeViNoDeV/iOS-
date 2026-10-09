@@ -236,7 +236,7 @@ function relTitle(p) {
   return p.kind;
 }
 const relName = (p) => (p.species ? p.firstName : `${p.firstName} ${p.lastName}`);
-const relEmoji = (p) => (p.species ? petEmoji[p.species] || "🐾" : !p.isAlive ? "🪦" : avatarEmoji(p.age, p.gender));
+const relEmoji = (p) => personAvatar(p);
 
 function relStatus(p) {
   if (!p.isAlive || p.species) return null;
@@ -269,6 +269,7 @@ function makePerson(kind, age, opts = {}) {
   };
   assignOccupation(p);
   ensureNpcStats(p);
+  p.look = randomLook(g, age);
   return p;
 }
 
@@ -356,11 +357,13 @@ function newLife(first, last, gender) {
     const s = makePerson("sibling", rnd(1, Math.min(15, Math.max(1, mother.age - 18))), { lastName: last });
     s.money = 0;
     applyInheritance(s, mother, father);
+    s.look = inheritLook(mother.look, father.look, s.gender, s.age);
     L.relationships.push(s);
   }
   // You take after your parents, partly.
   const genes = inheritedStats(mother, father);
   L.stats.looks = genes.looks; L.stats.smarts = genes.smarts; L.stats.health = genes.health;
+  L.look = inheritLook(mother.look, father.look, g, 0);
   let intro = `I was born a ${g} in ${place[0]}, ${place[1]}. My mother is ${relName(mother)} (${mother.age}) and my father is ${relName(father)} (${father.age}).`;
   if (siblingCount > 0) {
     const names = L.relationships.filter((p) => p.kind === "sibling").map((p) => `${relTitle(p).toLowerCase()} ${p.firstName}`);
@@ -372,7 +375,7 @@ function newLife(first, last, gender) {
 
 // Derived values
 const fullName = (L) => `${L.firstName} ${L.lastName}`;
-const lifeEmoji = (L) => (L.isAlive ? avatarEmoji(L.age, L.gender) : "🪦");
+const lifeEmoji = (L) => (L.isAlive ? playerAvatar(L) : "🪦");
 const inPrison = (L) => L.prisonYearsLeft > 0;
 const inGradeSchool = (L) => L.age >= 5 && L.age <= 17 && !L.droppedOut;
 const netWorth = (L) => L.money + L.assets.reduce((s, a) => s + a.value - a.loan, 0) - L.studentLoans;
@@ -902,6 +905,7 @@ function continueAs(L, child) {
   next.age = child.age;
   next.generation = L.generation + 1;
   ensureNpcStats(child);
+  next.look = { ...ensureLook(child), acc: [...(child.look.acc || [])] };
   next.stats.looks = child.looks;
   next.stats.smarts = child.smarts;
   next.stats.health = Math.max(child.health, 40);
@@ -912,7 +916,7 @@ function continueAs(L, child) {
   next.money = inheritance;
   const deceased = {
     id: uid(), kind: L.gender === "male" ? "father" : "mother", firstName: L.firstName, lastName: L.lastName, gender: L.gender,
-    age: L.age, bond: child.bond, looks: L.stats.looks, money: 0, species: null, isAlive: false, trait: null, occupation: null,
+    age: L.age, bond: child.bond, looks: L.stats.looks, look: L.look, money: 0, species: null, isAlive: false, trait: null, occupation: null,
     salary: 0, lastContact: null, yearsTogether: 0,
   };
   next.relationships = [deceased];

@@ -104,8 +104,9 @@ function askProtection(title, run) {
   ]);
 }
 
-function startLife(first, last, gender) {
+function startLife(first, last, gender, look) {
   store.life = newLife(first, last, gender);
+  if (look) applyChosenLook(store.life, look);
   store.life.mature = !!store.settings.mature;
   store.life.protection = true;
   ui.tab = "career"; ui.stack = []; ui.outcome = null; ui.choice = null; ui.openings = null;
@@ -180,9 +181,10 @@ function renderStart() {
       <div class="seg" role="group" aria-label="Gender">
         <button class="btn" aria-pressed="${f.gender === "male"}" data-h="${h(() => { readForm(); f.gender = "male"; render(); })}">Male</button>
         <button class="btn" aria-pressed="${f.gender === "female"}" data-h="${h(() => { readForm(); f.gender = "female"; render(); })}">Female</button>
-        <button class="btn primary" style="margin-left:auto" data-h="${h(() => { readForm(); startLife(f.first, f.last, f.gender); })}">Start this life</button>
       </div>
     </div>
+    ${renderCreateLook()}
+    <button class="btn primary big-start" data-h="${h(() => { readForm(); startLife(f.first, f.last, f.gender, formLook()); })}">Start this life</button>
     ${section("Settings", matureToggleRow())}
     ${grave}
   </div></div>`;
@@ -496,7 +498,7 @@ function renderCandidateModal(L) {
   buttons += `<button class="choice secondary" data-h="${next}">Meet someone else ›</button>`;
   buttons += `<button class="choice secondary" data-h="${close}">Not now</button>`;
   return `<div class="scrim"><div class="modal event candidate" role="dialog" aria-modal="true" aria-labelledby="m-title" data-stop="1">
-    <div class="event-head"><div class="event-emoji" aria-hidden="true">${avatarEmoji(p.age, p.gender)}</div><div class="modal-tag">${mode === "date" ? "Dating" : "Making friends"}</div>
+    <div class="event-head"><div class="event-emoji" aria-hidden="true">${personAvatar(p)}</div><div class="modal-tag">${mode === "date" ? "Dating" : "Making friends"}</div>
       <h3 id="m-title">${esc(relName(p))}, ${p.age}</h3></div>
     <div class="event-body"><p>You met ${esc(p.firstName)} ${esc(p.metAt)}.${facts.length ? ` ${esc(facts.join(" · "))}` : ""}</p>
       ${p.trait ? `<p class="muted" style="margin-top:-6px">${esc(Traits[p.trait][1])}</p>` : ""}
@@ -610,11 +612,14 @@ function renderEmigrate(L) {
 // MARK: Profile tab
 
 function renderProfile(L) {
+  const look = ensureLook(L, L.gender, L.age);
+  let html = section("Appearance", `<div class="profile-look">${playerAvatar(L)}<div class="muted small">${esc(describeLook(look))}</div></div>`
+    + row("💇", "Change your look", inPrison(L) ? "Not from prison" : "Hair, dye, facial hair, accessories and outfits", () => push({ type: "look", mode: "salon" }), { chev: true, disabled: inPrison(L) }));
   let about = lv("Lives in", esc(`${L.city}, ${L.country}`)) + lv("Gender", cap(L.gender)) + lv("Generation", L.generation)
     + lv("Education", eduLabel[L.education]) + lv("Occupation", esc(L.job ? L.job.title : L.isRetired ? "Retired" : schoolName(L) || "None"))
     + lv("Net worth", formatMoney(netWorth(L))) + lv("Licenses", esc(Object.keys(Licenses).filter((id) => hasLicense(L, id)).map((id) => Licenses[id].name).join(", ") || "None"))
     + lv("Followers", formatCount(L.followers)) + lv("Partners", count(L, "partners")) + lv("Children", childrenOf(L).length);
-  let html = section("About me", about);
+  html += section("About me", about);
   let health = "";
   if (!L.illnesses.length && !L.addictions.length) health = `<div class="pad muted">No health problems 💪</div>`;
   health += L.illnesses.map((i) => `<div class="pad">🤒 ${esc(Illnesses[i].name)}</div>`).join("");
@@ -644,6 +649,7 @@ function renderSubview(L, view) {
     case "godPerson": return renderGodPerson(L, view);
     case "business": return renderBusiness(L, view);
     case "pack": return renderPack(L, view);
+    case "look": return renderLookView(L, view);
   }
   return "";
 }

@@ -230,6 +230,7 @@ function chooseRoyalStart() {
     label: `👑 ${m.country}${note[m.succession]}${m.gov === "absolute" ? " · absolute" : ""}`,
     fn: () => {
       store.life = newRoyalLife(m.country, ui.form.first, ui.form.gender);
+      if (ui.form.look) applyChosenLook(store.life, ui.form.look);
       store.life.mature = !!store.settings.mature;
       store.life.protection = true;
       ui.tab = "packs"; ui.stack = [{ type: "pack", id: "royal" }]; ui.outcome = null; ui.openings = null;

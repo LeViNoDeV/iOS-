@@ -125,7 +125,7 @@ function dealDrugs(L) {
 function startPregnancy(L, partner) {
   if (L.age < 18 || L.pregnancy) return "";
   L.pregnancy = { partnerId: partner.id || null, partnerName: partner.firstName, carrier: L.gender === "female" ? "me" : "partner", dueAge: L.age + 1,
-    partnerStats: partner.looks != null ? { looks: partner.looks, smarts: partner.smarts ?? 50, health: partner.health ?? 70 } : null };
+    partnerStats: partner.looks != null ? { looks: partner.looks, smarts: partner.smarts ?? 50, health: partner.health ?? 70, look: partner.look || randomLook(partner.gender, 30) } : null };
   const text = L.gender === "female" ? "I'm pregnant! 🤰 The baby is due next year." : `${partner.firstName} is pregnant! 🤰 The baby is due next year.`;
   popup(L, "🤰", "Pregnant!", text);
   return " " + text;
@@ -134,7 +134,7 @@ function startPregnancy(L, partner) {
 /// A chance of pregnancy when two adults of different genders sleep together unprotected.
 function maybePregnancy(L, partnerGender, partnerName, chance, partnerId = null, stats = null) {
   if (L.age < 18 || partnerGender === L.gender || L.age > 50 || L.pregnancy || !roll(chance)) return "";
-  return startPregnancy(L, { id: partnerId, firstName: partnerName, gender: partnerGender, ...(stats ? { looks: stats.looks, smarts: stats.smarts, health: stats.health } : {}) });
+  return startPregnancy(L, { id: partnerId, firstName: partnerName, gender: partnerGender, ...(stats ? { looks: stats.looks, smarts: stats.smarts, health: stats.health, look: stats.look } : {}) });
 }
 
 /// Runs each year: a pregnancy that started last year ends with a birth.
@@ -147,7 +147,8 @@ function progressPregnancy(L) {
   baby.occupation = null; baby.salary = 0; baby.money = 0; baby.lastContact = L.age;
   const partner = pg.partnerId ? findRel(L, pg.partnerId) : null;
   // The baby takes after both parents: you, and the partner (or a one-night stand).
-  applyInheritance(baby, playerAsParent(L), partner ? ensureNpcStats(partner) : pg.partnerStats || strangerParent());
+  if (partner) ensureLook(partner);
+  applyInheritance(baby, playerAsParent(L), partner ? ensureNpcStats(partner) : pg.partnerStats?.look ? pg.partnerStats : strangerParent());
   L.relationships.push(baby);
   if (partner) { touch(L, partner.id); updateRel(L, partner.id, (x) => { x.bond += 8; }); }
   if (pg.carrier === "me") adjust(L, { health: -4, happiness: 12 });

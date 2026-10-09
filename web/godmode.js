@@ -114,6 +114,7 @@ function renderGodMode(L) {
     </div>`);
 
   // Quick fixes
+  html += section("Appearance", row("🎨", "Edit my appearance", "Skin tone, eyes, hair, facial hair, accessories", () => push({ type: "look", mode: "god" }), { chev: true }));
   html += section("Miracles", [
     row("💊", "Cure everything", "Remove all illnesses and addictions", () => { L.illnesses = []; L.addictions = []; L.stats.health = Math.max(L.stats.health, 80); save(); render(); }, { disabled: !L.illnesses.length && !L.addictions.length }),
     row("🔓", "Get out of prison", inPrison(L) ? `${plural(L.prisonYearsLeft, "year")} left` : "You're free", () => { L.prisonYearsLeft = 0; record(L, "⚡ I was mysteriously released from prison."); save(); render(); }, { disabled: !inPrison(L) }),
@@ -141,6 +142,7 @@ function renderGodPerson(L, view) {
   const p = findRel(L, view.id);
   if (!p) return `<div class="pad muted">They're no longer in your life.</div>`;
   let html = `<div class="hero-person"><div class="big">${relEmoji(p)}</div><h3>${esc(relName(p))}</h3><div class="muted">${esc(relTitle(p))} · Age ${p.age}</div></div>`;
+  if (!p.species) html += section("Appearance", row("🎨", "Edit their appearance", null, () => push({ type: "look", mode: "god", id: p.id }), { chev: true }));
   html += section("Edit", `<div class="pad god-sliders">
     ${godSlider("Relationship", "💞", p.bond, `data-god="person:bond:${p.id}"`)}
     ${(ensureNpcStats(p), p.species ? godSlider("Health", "❤️", p.health, `data-god="person:health:${p.id}"`) : NpcStats.map(([k, e, label]) => godSlider(label, e, p[k], `data-god="person:${k}:${p.id}"`)).join(""))}
